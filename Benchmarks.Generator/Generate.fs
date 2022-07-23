@@ -4,7 +4,6 @@ open System
 open System.Diagnostics
 open System.IO
 open System.Runtime.CompilerServices
-open System.Threading
 open Benchmarks.Common.Dtos
 open CommandLine
 open CommandLine.Text
@@ -21,7 +20,7 @@ let mutable private log : ILogger = null
 /// General utilities
 [<RequireQualifiedAccess>]
 module Utils =
-    let runProcess name args workingDir (envVariables : (string * string) list) (printOutput : bool) =
+    let runProcess name args workingDir (envVariables : (string * string) list) (outputLogLevel : LogEventLevel) =
         let info = ProcessStartInfo()
         info.WindowStyle <- ProcessWindowStyle.Hidden
         info.Arguments <- args
@@ -30,26 +29,24 @@ module Utils =
         info.WorkingDirectory <- workingDir
         info.RedirectStandardError <- true
         info.RedirectStandardOutput <- true
-        info.RedirectStandardInput <- true
         info.CreateNoWindow <- true
         
         envVariables
         |> List.iter (fun (k, v) -> info.EnvironmentVariables[k] <- v)
         
-        log.Information("Running '{name} {args}' in '{workingDir}'", name, args, workingDir)
-        let p = Process.Start(info)
-        let o = p.StandardOutput.ReadToEnd()
-        let errors = p.StandardError.ReadToEnd()
+        log.Verbose("Running '{name} {args}' in '{workingDir}'", name, args, workingDir)
+        let p = new Process(StartInfo = info)
+        p.EnableRaisingEvents <- true
+        p.OutputDataReceived.Add(fun args -> log.Write(outputLogLevel, args.Data))
+        p.ErrorDataReceived.Add(fun args -> log.Error(args.Data))
+        p.Start() |> ignore
+        p.BeginErrorReadLine()
+        p.BeginOutputReadLine()
         p.WaitForExit()
+        
         if p.ExitCode <> 0 then
-            let msg = $"Process {name} {args} failed: {errors}."
-            log.Error $"{msg}"
-            log.Error("Full process output below:")
-            log.Error("{output}", o)
-            failwith msg
-        else if printOutput then
-            log.Verbose("Full process output below:")
-            log.Verbose("{output}", o)
+            log.Error("Process '{name} {args}' failed - check full process output above.", name, args)
+            failwith $"Process {name} {args} failed - check full process output above."
 
 /// Handling Git operations
 [<RequireQualifiedAccess>]
@@ -59,7 +56,7 @@ module Git =
     let clone (dir : string) (gitUrl : string) : Repository =
         if Directory.Exists dir then
             failwith $"{dir} already exists for code root"
-        log.Information("Fetching '{gitUrl}' in '{dir}'", gitUrl, dir)
+        log.Verbose("Fetching '{gitUrl}' in '{dir}'", gitUrl, dir)
         Repository.Init(dir) |> ignore
         let repo = new Repository(dir)
         let remote = repo.Network.Remotes.Add("origin", gitUrl)
@@ -67,7 +64,7 @@ module Git =
         repo
         
     let checkout (repo : Repository) (revision : string) : unit =
-        log.Information("Checkout revision {revision} in {repo.Info.Path}", revision, repo.Info.Path)
+        log.Verbose("Checkout revision {revision} in {repo.Info.Path}", revision, repo.Info.Path)
         Commands.Checkout(repo, revision) |> ignore
 
 /// Preparing a codebase based on a 'RepoSpec'
@@ -133,7 +130,9 @@ module Generate =
         
     [<MethodImpl(MethodImplOptions.NoInlining)>]
     let init (slnPath : string) =
-        Init.init (DirectoryInfo(Path.GetDirectoryName slnPath)) None
+        let directoryName = Path.GetDirectoryName slnPath
+        log.Verbose("Calling {method} for directory {directory}", "Ionide.ProjInfo.Init.init", directoryName)
+        Init.init (DirectoryInfo(directoryName)) None
     
     type Config =
         {
@@ -158,12 +157,12 @@ module Generate =
             | null, codeRoot ->
                 Codebase.Local codeRoot
             | _, _ -> failwith $"Both git repo and local code root were provided - that's not supported"
-        let sln = Path.Combine(codebase.Path, case.SlnRelative)
+        
         log.Information("Running {steps} codebase prep steps", case.CodebasePrep.Length)
         case.CodebasePrep
         |> List.iteri (fun i step ->
-            log.Information("Running codebase prep step {step}/{steps}", i+1, case.CodebasePrep.Length)
-            Utils.runProcess step.Command step.Args codebase.Path [] true
+            log.Verbose("Running codebase prep step {step}/{steps}", i+1, case.CodebasePrep.Length)
+            Utils.runProcess step.Command step.Args codebase.Path [] LogEventLevel.Verbose
         )
         codebase
     
@@ -174,7 +173,7 @@ module Generate =
         let loader = WorkspaceLoader.Create(toolsPath, props)
         let vs = Microsoft.Build.Locator.MSBuildLocator.RegisterDefaults()        
         let projects = loader.LoadSln(sln, [], BinaryLogGeneration.Off) |> Seq.toList
-        log.Information("{projectsCount} projects loaded", projects.Length)
+        log.Information("{projectsCount} projects loaded from {sln}", projects.Length, sln)
         if projects.Length = 0 then
             failwith $"No projects were loaded from {sln} - this indicates an error in cracking the projects"
         
@@ -187,7 +186,7 @@ module Generate =
     [<MethodImpl(MethodImplOptions.NoInlining)>]
     let private loadOptions (sln : string) =
         use _ = LogContext.PushProperty("step", "LoadOptions")
-        log.Information("Constructing FSharpProjectOptions from {sln}", sln)
+        log.Verbose("Constructing FSharpProjectOptions from {sln}", sln)
         let toolsPath = init sln
         doLoadOptions toolsPath sln
     
@@ -195,7 +194,7 @@ module Generate =
         let sln = Path.Combine(codeRoot, case.SlnRelative)
         let options = loadOptions sln
         
-        log.Information("Generating actions")
+        log.Verbose("Generating actions")
         let actions =
             case.CheckActions
             |> List.mapi (fun i {FileName = projectRelativeFileName; ProjectName = projectName} ->
@@ -270,7 +269,7 @@ module Generate =
                 additionalEnvVariables
                 @ emptyProjInfoEnvironmentVariables()
             log.Information("Starting the benchmark")
-            Utils.runProcess "dotnet" $"run -c Release -- {inputsPath} {config.Iterations}" workingDir envVariables true
+            Utils.runProcess "dotnet" $"run -c Release -- {inputsPath} {config.Iterations}" workingDir envVariables LogEventLevel.Information
         else
             log.Information("Not running the benchmark as requested")
             
@@ -305,43 +304,50 @@ module Generate =
                     .WriteTo.Console(outputTemplate = "[{Timestamp:HH:mm:ss} {Level:u3}] {step:j}: {Message:lj}{NewLine}{Exception}")
                     .MinimumLevel.Is(if args.Verbose then LogEventLevel.Verbose else LogEventLevel.Information)
                     .CreateLogger()
-        
-        log.Verbose("{args}")
-        
-        let config =
-            {
-                Config.CheckoutBaseDir = args.CheckoutsDir
-                Config.FcsDllPath = args.FcsDllPath
-                Config.Iterations = args.Iterations
-            }
-        let case =
-            use _ = LogContext.PushProperty("step", "Read input")
-            try
-                let path = args.Input
-                path
-                |> File.ReadAllText
-                |> JsonConvert.DeserializeObject<BenchmarkCase>
-                |> fun case ->
-                        let defaultCodebasePrep =
-                            [
-                                {
-                                    CodebasePrepStep.Command = "dotnet"
-                                    CodebasePrepStep.Args = $"restore {case.SlnRelative}"
-                                }
-                            ]
-                        let codebasePrep =
-                            match obj.ReferenceEquals(case.CodebasePrep, null) with
-                            | true -> defaultCodebasePrep
-                            | false -> case.CodebasePrep
-                        
-                        { case with CodebasePrep = codebasePrep }
-            with e ->
-                let msg = $"Failed to read inputs file: {e.Message}"
-                log.Fatal(msg)
-                reraise()
-        
-        use _ = LogContext.PushProperty("step", "PrepareAndRun")
-        prepareAndRun config case args.Run args.Cleanup
+        try
+            log.Verbose("CLI args provided:" + Environment.NewLine + "{args}", args)
+            
+            let config =
+                {
+                    Config.CheckoutBaseDir = args.CheckoutsDir
+                    Config.FcsDllPath = args.FcsDllPath
+                    Config.Iterations = args.Iterations
+                }
+            let case =
+                use _ = LogContext.PushProperty("step", "Read input")
+                try
+                    let path = args.Input
+                    log.Verbose("Read and deserialize inputs from {path}", path)
+                    path
+                    |> File.ReadAllText
+                    |> JsonConvert.DeserializeObject<BenchmarkCase>
+                    |> fun case ->
+                            let defaultCodebasePrep =
+                                [
+                                    {
+                                        CodebasePrepStep.Command = "dotnet"
+                                        CodebasePrepStep.Args = $"restore {case.SlnRelative}"
+                                    }
+                                ]
+                            let codebasePrep =
+                                match obj.ReferenceEquals(case.CodebasePrep, null) with
+                                | true -> defaultCodebasePrep
+                                | false -> case.CodebasePrep
+                            
+                            { case with CodebasePrep = codebasePrep }
+                with e ->
+                    let msg = $"Failed to read inputs file: {e.Message}"
+                    log.Fatal(msg)
+                    reraise()
+            
+            use _ = LogContext.PushProperty("step", "PrepareAndRun")
+            prepareAndRun config case args.Run args.Cleanup
+        with ex ->
+            if args.Verbose then
+                log.Fatal(ex, "Failure.")
+            else
+                log.Fatal(ex, "Failure. Consider using --verbose for extra information.")
+            
     
     let help result (errors : Error seq) =
         let helpText =
