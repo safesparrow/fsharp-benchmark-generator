@@ -155,6 +155,7 @@ module Generate =
         {
             CheckoutBaseDir : string
             FcsDllPath : string option // defaults to a NuGet package
+            Iterations : int
         }
     
     type Codebase =
@@ -283,7 +284,7 @@ module Generate =
                 additionalEnvVariables
                 @ emptyProjInfoEnvironmentVariables()
             log.LogInformation("Running the benchmark...")
-            Utils.runProcess "dotnet" $"run -c Release -- {inputsPath}" workingDir envVariables true
+            Utils.runProcess "dotnet" $"run -c Release -- {inputsPath} {config.Iterations}" workingDir envVariables true
         else
             log.LogInformation $"Not running the benchmark as requested"
             
@@ -306,6 +307,8 @@ module Generate =
             Cleanup : bool
             [<CommandLine.Option('f', HelpText = "Path to the FSharp.Compiler.Service.dll to benchmark - by default a NuGet package is used instead")>]
             FcsDllPath : string option
+            [<CommandLine.Option('n', Default = 1, HelpText = "Number of iterations to run. Defaults to 1")>]
+            Iterations : int
         }
     
     let run (args : Args) =
@@ -313,6 +316,7 @@ module Generate =
             {
                 Config.CheckoutBaseDir = args.CheckoutsDir
                 Config.FcsDllPath = args.FcsDllPath
+                Config.Iterations = args.Iterations
             }
         let case =
             use _ = log.BeginScope("Read input")

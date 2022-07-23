@@ -27,7 +27,6 @@ type FCSBenchmark (config : BenchmarkConfig) =
                 | FSharpCheckFileAnswer.Succeeded results ->
                     failOnErrors results
                 action, ((result, answer) :> Object)
-        printfn $"Performed action {action.GetType()} in {sw.ElapsedMilliseconds}ms"
         res
             
     let cleanCaches () =
@@ -38,24 +37,37 @@ type FCSBenchmark (config : BenchmarkConfig) =
     member this.PerformAction action = performAction action
     member this.CleanCaches () = cleanCaches
 
-let run (inputs : BenchmarkInputs) =
+let runIteration (inputs : BenchmarkInputs) =
     let sw = Stopwatch.StartNew()
     let b = FCSBenchmark(inputs.Config)
     let outputs =
         inputs.Actions
-        |> List.map b.PerformAction
-    printfn $"Performed {outputs.Length} actions in {sw.ElapsedMilliseconds}ms"
+        |> List.mapi (fun i action ->
+            printfn $"[{i}] Action: start"
+            let output = b.PerformAction action
+            printfn $"[{i}] Action: took {sw.ElapsedMilliseconds}ms"
+            output
+        )
+    printfn $"Performed {outputs.Length} action(s) in {sw.ElapsedMilliseconds}ms"
     ()
 
 [<EntryPoint>]
 let main args =
     match args with
-    | [|inputFile|] ->
+    | [|inputFile; iterations|] ->
+        let iterations = Int32.Parse iterations
+        printfn $"Deserializing inputs from '{inputFile}'"
         let json = File.ReadAllText(inputFile)
         let inputs = deserializeInputs json
-        run inputs
+        printfn $"Running {iterations} iteration(s) of the benchmark, each containing {inputs.Actions.Length} action(s)"
+        let sw = Stopwatch.StartNew()
+        for i in 1..iterations do
+            runIteration inputs
+        sw.Stop()
+        let meanIterationTimeMs = sw.ElapsedMilliseconds/(int64)iterations
+        printfn $"Performed {iterations} iteration(s) in {sw.ElapsedMilliseconds} - averaging {meanIterationTimeMs}ms per iteration"
         0
     | _ ->
-        printfn $"Invalid args: %A{args}. Expected format: 'dotnet run [input file.json]'"
+        printfn $"Invalid args: %A{args}. Expected format: 'dotnet run [input file.json] [iterations]'"
         1
     
