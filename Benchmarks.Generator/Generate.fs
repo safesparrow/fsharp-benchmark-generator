@@ -11,21 +11,12 @@ open CommandLine.Text
 open FSharp.Compiler.CodeAnalysis
 open Ionide.ProjInfo
 open Ionide.ProjInfo.Types
-open Microsoft.Extensions.Logging
 open Newtonsoft.Json
+open Serilog
+open Serilog.Context
+open Serilog.Events
 
-let private loggerFactory = LoggerFactory.Create(
-    fun builder ->
-        builder.AddSimpleConsole(fun options ->
-            options.IncludeScopes <- false
-            options.SingleLine <- true
-            options.TimestampFormat <- "HH:mm:ss.fff"
-        )
-        |> ignore
-)
-
-type internal Marker = interface end
-let private log = loggerFactory.CreateLogger<Marker>()
+let mutable private log : ILogger = null
 
 /// General utilities
 [<RequireQualifiedAccess>]
@@ -45,27 +36,20 @@ module Utils =
         envVariables
         |> List.iter (fun (k, v) -> info.EnvironmentVariables[k] <- v)
         
-        log.LogInformation $"Running '{name} {args}' in '{workingDir}'"
+        log.Information("Running '{name} {args}' in '{workingDir}'", name, args, workingDir)
         let p = Process.Start(info)
         let o = p.StandardOutput.ReadToEnd()
         let errors = p.StandardError.ReadToEnd()
         p.WaitForExit()
         if p.ExitCode <> 0 then
             let msg = $"Process {name} {args} failed: {errors}."
-            log.LogError $"{msg}. Its full output:"
-            // This is a workaround to make sure that the above log is flushed before the long message below
-            Thread.Sleep(100) 
-            Console.ForegroundColor <- ConsoleColor.Gray
-            printfn $"{o}"
-            Console.ResetColor()
+            log.Error $"{msg}"
+            log.Error("Full process output below:")
+            log.Error("{output}", o)
             failwith msg
         else if printOutput then
-            log.LogInformation "Full output of the process:"
-            // This is a workaround to make sure that the above log is flushed before the long message below
-            Thread.Sleep(100)
-            Console.ForegroundColor <- ConsoleColor.DarkGray
-            printfn $"{o}"
-            Console.ResetColor()
+            log.Verbose("Full process output below:")
+            log.Verbose("{output}", o)
 
 /// Handling Git operations
 [<RequireQualifiedAccess>]
@@ -75,7 +59,7 @@ module Git =
     let clone (dir : string) (gitUrl : string) : Repository =
         if Directory.Exists dir then
             failwith $"{dir} already exists for code root"
-        log.LogInformation $"Fetching '{gitUrl}' in '{dir}'..."
+        log.Information("Fetching '{gitUrl}' in '{dir}'", gitUrl, dir)
         Repository.Init(dir) |> ignore
         let repo = new Repository(dir)
         let remote = repo.Network.Remotes.Add("origin", gitUrl)
@@ -83,7 +67,7 @@ module Git =
         repo
         
     let checkout (repo : Repository) (revision : string) : unit =
-        log.LogInformation $"Checkout revision {revision} in {repo.Info.Path}"
+        log.Information("Checkout revision {revision} in {repo.Info.Path}", revision, repo.Info.Path)
         Commands.Checkout(repo, revision) |> ignore
 
 /// Preparing a codebase based on a 'RepoSpec'
@@ -109,14 +93,14 @@ module RepoSetup =
         Path.Combine(config.BaseDir, spec.Name, spec.Revision)
     
     let prepare (config : Config) (spec : RepoSpec) =
-        log.LogInformation $"Checking out {spec}"
+        log.Information("Preparing repo {spec}", spec)
         let dir = revisionDir config spec
         if Repository.IsValid dir |> not then
             use repo = Git.clone dir spec.GitUrl
             Git.checkout repo spec.Revision
             repo
         else
-            log.LogInformation $"{dir} already exists - will assume the correct repository is already checked out"
+            log.Information("{dir} already exists - will assume the correct repository is already checked out", dir)
             new Repository(dir)
 
 [<RequireQualifiedAccess>]
@@ -164,7 +148,7 @@ module Generate =
         with member this.Path = match this with | Local codeRoot -> codeRoot | Git repo -> repo.Info.WorkingDirectory
     
     let prepareCodebase (config : Config) (case : BenchmarkCase) : Codebase =
-        use _ = log.BeginScope("PrepareCodebase")
+        use _ = LogContext.PushProperty("step", "PrepareCodebase")
         let codebase =
             match (case.Repo :> obj, case.LocalCodeRoot) with
             | null, null -> failwith "Either git repo or local code root details are required"
@@ -175,10 +159,10 @@ module Generate =
                 Codebase.Local codeRoot
             | _, _ -> failwith $"Both git repo and local code root were provided - that's not supported"
         let sln = Path.Combine(codebase.Path, case.SlnRelative)
-        log.LogInformation($"Running {case.CodebasePrep.Length} codebase prep steps...")
+        log.Information("Running {steps} codebase prep steps", case.CodebasePrep.Length)
         case.CodebasePrep
         |> List.iteri (fun i step ->
-            log.LogInformation($"Running codebase prep step [{i+1}/{case.CodebasePrep.Length}]")
+            log.Information("Running codebase prep step {step}/{steps}", i+1, case.CodebasePrep.Length)
             Utils.runProcess step.Command step.Args codebase.Path [] true
         )
         codebase
@@ -190,7 +174,7 @@ module Generate =
         let loader = WorkspaceLoader.Create(toolsPath, props)
         let vs = Microsoft.Build.Locator.MSBuildLocator.RegisterDefaults()        
         let projects = loader.LoadSln(sln, [], BinaryLogGeneration.Off) |> Seq.toList
-        log.LogInformation $"{projects.Length} projects loaded"
+        log.Information("{projectsCount} projects loaded", projects.Length)
         if projects.Length = 0 then
             failwith $"No projects were loaded from {sln} - this indicates an error in cracking the projects"
         
@@ -202,8 +186,8 @@ module Generate =
     
     [<MethodImpl(MethodImplOptions.NoInlining)>]
     let private loadOptions (sln : string) =
-        use _ = log.BeginScope("LoadOptions")
-        log.LogInformation($"Constructing FSharpProjectOptions from {sln}")
+        use _ = LogContext.PushProperty("step", "LoadOptions")
+        log.Information("Constructing FSharpProjectOptions from {sln}", sln)
         let toolsPath = init sln
         doLoadOptions toolsPath sln
     
@@ -211,7 +195,7 @@ module Generate =
         let sln = Path.Combine(codeRoot, case.SlnRelative)
         let options = loadOptions sln
         
-        log.LogInformation("Generating actions")
+        log.Information("Generating actions")
         let actions =
             case.CheckActions
             |> List.mapi (fun i {FileName = projectRelativeFileName; ProjectName = projectName} ->
@@ -265,34 +249,36 @@ module Generate =
     let private prepareAndRun (config : Config) (case : BenchmarkCase) (doRun : bool) (cleanup : bool) =
         let codebase = prepareCodebase config case
         let inputs = generateInputs case codebase.Path
-        log.LogInformation("Serializing generated inputs")
-        let serialized = serializeInputs inputs
         let inputsPath = makeInputsPath codebase.Path
-        log.LogInformation $"Saving inputs as {inputsPath}"        
+        log.Information("Serializing inputs as {inputsPath}", inputsPath)        
+        let serialized = serializeInputs inputs
         Directory.CreateDirectory(Path.GetDirectoryName(inputsPath)) |> ignore
         File.WriteAllText(inputsPath, serialized)
         
         if doRun then
-            use _ = log.BeginScope "Run"
-            log.LogInformation "Starting the benchmark..."
+            use _ = LogContext.PushProperty("step", "Run")
             let workingDir = "Benchmarks.Runner"
             let additionalEnvVariables =
                 match config.FcsDllPath with
                 | None -> MSBuildProps.makeDefault()
-                | Some fcsDllPath -> MSBuildProps.makeDll fcsDllPath
+                | Some fcsDllPath ->
+                    let absolutePath = Path.Combine(workingDir, fcsDllPath)
+                    if File.Exists absolutePath |> not then
+                        failwith $"Given FCS dll path doesn't exist: {absolutePath}"
+                    MSBuildProps.makeDll fcsDllPath
             let envVariables =
                 additionalEnvVariables
                 @ emptyProjInfoEnvironmentVariables()
-            log.LogInformation("Running the benchmark...")
+            log.Information("Starting the benchmark")
             Utils.runProcess "dotnet" $"run -c Release -- {inputsPath} {config.Iterations}" workingDir envVariables true
         else
-            log.LogInformation $"Not running the benchmark as requested"
+            log.Information("Not running the benchmark as requested")
             
         match codebase, cleanup with
         | Local _, _ -> ()
         | Git _, false -> ()
         | Git repo, true ->
-            log.LogInformation $"Cleaning up checked out git repo {repo.Info.Path} as requested"
+            log.Information("Cleaning up checked out git repo {repoPath} as requested", repo.Info.Path)
             Directory.Delete repo.Info.Path
     
     type Args =
@@ -307,11 +293,21 @@ module Generate =
             Cleanup : bool
             [<CommandLine.Option('f', HelpText = "Path to the FSharp.Compiler.Service.dll to benchmark - by default a NuGet package is used instead")>]
             FcsDllPath : string option
-            [<CommandLine.Option('n', Default = 1, HelpText = "Number of iterations to run. Defaults to 1")>]
+            [<CommandLine.Option('n', Default = 1, HelpText = "Number of iterations to run")>]
             Iterations : int
+            [<CommandLine.Option('v', Default = false, HelpText = "Verbose logging. Includes output of ")>]
+            Verbose : bool
         }
     
     let run (args : Args) =
+        
+        log <-LoggerConfiguration().Enrich.FromLogContext()
+                    .WriteTo.Console(outputTemplate = "[{Timestamp:HH:mm:ss} {Level:u3}] {step:j}: {Message:lj}{NewLine}{Exception}")
+                    .MinimumLevel.Is(if args.Verbose then LogEventLevel.Verbose else LogEventLevel.Information)
+                    .CreateLogger()
+        
+        log.Verbose("{args}")
+        
         let config =
             {
                 Config.CheckoutBaseDir = args.CheckoutsDir
@@ -319,7 +315,7 @@ module Generate =
                 Config.Iterations = args.Iterations
             }
         let case =
-            use _ = log.BeginScope("Read input")
+            use _ = LogContext.PushProperty("step", "Read input")
             try
                 let path = args.Input
                 path
@@ -341,10 +337,10 @@ module Generate =
                         { case with CodebasePrep = codebasePrep }
             with e ->
                 let msg = $"Failed to read inputs file: {e.Message}"
-                log.LogCritical(msg)
+                log.Fatal(msg)
                 reraise()
         
-        use _ = log.BeginScope("PrepareAndRun")
+        use _ = LogContext.PushProperty("step", "PrepareAndRun")
         prepareAndRun config case args.Run args.Cleanup
     
     let help result (errors : Error seq) =
@@ -359,11 +355,10 @@ module Generate =
     [<EntryPoint>]
     [<MethodImpl(MethodImplOptions.NoInlining)>]
     let main args =
-        printfn $"{Environment.CurrentDirectory}"
         let parseResult = Parser.Default.ParseArguments<Args> args
         parseResult
-            .WithParsed(fun args -> run args)
+            .WithParsed(run)
             .WithNotParsed(fun errors -> help parseResult errors)
-        |> ignore
+        |> ignore        
         
         if parseResult.Tag = ParserResultType.Parsed then 0 else 1
