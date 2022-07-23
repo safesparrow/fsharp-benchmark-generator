@@ -2,7 +2,7 @@
   "Repo": {
     "Name": "fantomas",
     "GitUrl": "https://github.com/fsprojects/fantomas",
-    "Revision" : "724087e0ffe09c6e1db040fe81b9986d90be8cc6"
+    "Revision" : "0fe6785076e045f28e4c88e6a57dd09b649ce671"
   },
   "CodebasePrep": [
     {
@@ -12,6 +12,10 @@
     {
       "Command": "dotnet",
       "Args": "paket restore"
+    },
+    {
+      "Command": "dotnet",
+      "Args": "restore"      
     }
   ],
   "SlnRelative": "fantomas.sln",
