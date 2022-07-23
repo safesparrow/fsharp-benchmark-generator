@@ -3,8 +3,16 @@
 ## What is it
 A command-line app for generating and running benchmarks of FCS using high-level analysis definitions
 
+Its goal is to make it easy to run FCS benchmarks that are:
+* high-level
+* using real, publicly-available codebase examples
+* reproducible
+
 ## How it works
 ### Dependency graph
+Below chart describes dependencies of the two main components - generator and runner.
+
+Note that the generator is completely independent from the runner, including having different FCS references. 
 ```mermaid
 graph LR;
     subgraph Generation
@@ -17,29 +25,32 @@ graph LR;
     A2 -.->|JSON| R2
     
     subgraph Running
-        R1(FSharp.Compiler.Service source) --> R2(Benchmarks.Runner)
+        R1(FSharp.Compiler.Service source or NuGet) --> R2(Benchmarks.Runner)
         style R1 fill:green
     end
 ```
 ### Process steps graph
+Below chart describes the steps performed during a benchmark run and their dependencies, including any preparation steps
 ```mermaid
 graph TD;
     AA(description.json)
     AA-->A
     AB(GitHub/Git server)
     AB-->B
-    subgraph Benchmarks.Generator
+    subgraph Benchmarks.Generator process
         A(Codebase spec and analysis actions)-->|libgit2sharp| B(Locally checked out codebase);
-        B-->|Ionide.ProjInfo.FCS| C(FSharpProjectOptions)
+        B-->|Codebase prep steps| B1(Prepared codebase)
+        B1-->|Ionide.ProjInfo.FCS| C(FSharpProjectOptions)
         A-->D(BenchmarkSpec)
         C-->D
         D-->E(JSON-friendly DTO)
     end
     E-->|Newtonsoft.Json|F(FCS inputs.json)
     F-->|Newtonsoft.Json|G(JSON-friendly DTO)
-    subgraph Benchmarks.Runner
-        G-->H(BenchmarkSpec' - separate type)
-        J(FSharp.Compiler.Service source)-->K(FSharp.Compiler.Service dll)
+    B1-->K
+    subgraph Benchmarks.Runner process
+        G-->H(BenchmarkSpec')
+        J(FSharp.Compiler.Service source)-->K(Benchmarks.Runner)
         H-->K
     end
 ```
@@ -48,6 +59,8 @@ graph TD;
 ```bash
 dotnet run -i inputs/50_leaves.json 
 ```
+For more CLI options use `dotnet run --help`
+
 <details>
 <summary>Sample output:</summary>
 
