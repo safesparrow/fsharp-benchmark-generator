@@ -150,7 +150,6 @@ See an example from [inputs/local_example.json](inputs/local_example.json):
 ## Known issues
 * Benchmark assumes that the FSharp.Compiler.Service has already been built
 * Only `Release` configuration is supported
-* Currently BenchmarkDotNet is not used - a single iteration of the listed actions is performed
+* Currently BenchmarkDotNet is not used
 * Little customization of the actual benchmark's environment
-* Console output could be improved
 * Depends on having the correct MSBuild/Dotnet setup available
