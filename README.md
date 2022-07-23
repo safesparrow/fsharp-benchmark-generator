@@ -36,9 +36,9 @@ graph TD;
     AA(description.json)
     AA-->A
     AB(GitHub/Git server)
-    AB-->B
+    AB-->|libgit2sharp|B
     subgraph Benchmarks.Generator process
-        A(Codebase spec and analysis actions)-->|libgit2sharp| B(Locally checked out codebase);
+        A(Codebase spec and analysis actions)-->B(Locally checked out codebase);
         B-->|Codebase prep steps| B1(Prepared codebase)
         B1-->|Ionide.ProjInfo.FCS| C(FSharpProjectOptions)
         A-->D(BenchmarkSpec)
