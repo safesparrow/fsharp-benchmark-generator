@@ -20,9 +20,9 @@ and [<CLIMutable>] FSharpProjectOptionsDto =
     {
         ProjectFileName : string
         ProjectId : string option
-        SourceFiles : string[]
-        OtherOptions: string[]
-        ReferencedProjects: FSharpReferenceDto[]
+        SourceFiles : System.Collections.Generic.List<string>
+        OtherOptions: System.Collections.Generic.List<string>
+        ReferencedProjects: System.Collections.Generic.List<FSharpReferenceDto>
         IsIncompleteTypeCheckEnvironment : bool
         UseScriptResolutionRules : bool
         LoadTime : DateTime
@@ -51,7 +51,7 @@ type BenchmarkConfig =
 [<CLIMutable>]
 type BenchmarkInputsDto =
     {
-        Actions : BenchmarkActionDto list
+        Actions : System.Collections.Generic.List<BenchmarkActionDto>
         Config : BenchmarkConfig
     }
 
@@ -92,11 +92,12 @@ and private optionsToDto (o : FSharpProjectOptions) : FSharpProjectOptionsDto =
     {
         ProjectFileName = o.ProjectFileName
         ProjectId = o.ProjectId
-        SourceFiles = o.SourceFiles
-        OtherOptions = o.OtherOptions
+        SourceFiles = o.SourceFiles |> System.Collections.Generic.List
+        OtherOptions = o.OtherOptions |> System.Collections.Generic.List
         ReferencedProjects =
             o.ReferencedProjects
             |> Array.map referenceToDto
+            |> System.Collections.Generic.List
         IsIncompleteTypeCheckEnvironment = o.IsIncompleteTypeCheckEnvironment
         UseScriptResolutionRules = o.UseScriptResolutionRules
         LoadTime = o.LoadTime
@@ -116,7 +117,7 @@ let actionToDto (action : BenchmarkAction) =
 
 let inputsToDtos (inputs : BenchmarkInputs) =
     {
-        BenchmarkInputsDto.Actions = inputs.Actions |> List.map actionToDto
+        BenchmarkInputsDto.Actions = inputs.Actions |> List.map actionToDto |> System.Collections.Generic.List
         Config = inputs.Config
     }
 
@@ -127,11 +128,11 @@ let rec private optionsFromDto (o : FSharpProjectOptionsDto) : FSharpProjectOpti
     {
         ProjectFileName = o.ProjectFileName
         ProjectId = o.ProjectId
-        SourceFiles = o.SourceFiles
-        OtherOptions = o.OtherOptions
+        SourceFiles = o.SourceFiles.ToArray()
+        OtherOptions = o.OtherOptions.ToArray()
         ReferencedProjects =
-            o.ReferencedProjects
-            |> Array.map fakeRP
+            o.ReferencedProjects.ToArray()
+            |> Array.map fakeRP            
         IsIncompleteTypeCheckEnvironment = o.IsIncompleteTypeCheckEnvironment
         UseScriptResolutionRules = o.UseScriptResolutionRules
         LoadTime = o.LoadTime
@@ -153,11 +154,14 @@ let private actionFromDto (dto : BenchmarkActionDto) =
 
 let private inputsFromDto (dto : BenchmarkInputsDto) =
     {
-        BenchmarkInputs.Actions = dto.Actions |> List.map actionFromDto
+        BenchmarkInputs.Actions = dto.Actions.ToArray() |> Seq.map actionFromDto |> Seq.toList 
         Config = dto.Config
     }
 
-let jsonSerializerSettings = JsonSerializerSettings(PreserveReferencesHandling = PreserveReferencesHandling.Objects)
+let jsonSerializerSettings =
+    JsonSerializerSettings(
+        PreserveReferencesHandling = PreserveReferencesHandling.All
+    )
 
 let serializeInputs (inputs : BenchmarkInputs) : string =
     let dto = inputs |> inputsToDtos

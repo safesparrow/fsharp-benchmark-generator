@@ -48,6 +48,26 @@ graph TD;
 ```bash
 dotnet run -i inputs/50_leaves.json 
 ```
+<details>
+<summary>Sample output:</summary>
+
+```bash
+[13:17:58 INF] PrepareCodebase: Preparing repo 50_leaves - https://github.com/safesparrow/fsharp-samples at revision 744ada94e1fffda8d622f817f6b7642a0d17e4f0
+[13:17:58 INF] PrepareCodebase: .artifacts\50_leaves\744ada94e1fffda8d622f817f6b7642a0d17e4f0 already exists - will assume the correct repository is already checked out
+[13:17:58 INF] PrepareCodebase: Running 1 codebase prep steps
+[13:18:06 INF] LoadOptions: 51 projects loaded from D:\projekty\ftest\fsharp-benchmark-generator\.artifacts\50_leaves\744ada94e1fffda8d622f817f6b7642a0d17e4f0\50_leaves/solution.sln
+[13:18:06 INF] PrepareAndRun: Serializing inputs as D:\projekty\ftest\fsharp-benchmark-generator\.artifacts\50_leaves\744ada94e1fffda8d622f817f6b7642a0d17e4f0\.artifacts\2022-07-23_12-18-06.fcsinputs.json
+[13:18:06 INF] Run: Starting the benchmark
+[13:18:06 INF] Run: Deserializing inputs from 'D:\projekty\ftest\fsharp-benchmark-generator\.artifacts\50_leaves\744ada94e1fffda8d622f817f6b7642a0d17e4f0\.artifacts\2022-07-23_12-18-06.fcsinputs.json'
+[13:18:07 INF] Run: Running 1 iteration(s) of the benchmark, each containing 1 action(s)
+[13:18:07 INF] Run: [0] Action: start
+[13:18:25 INF] Run: 0 diagnostics calculated:
+[13:18:25 INF] Run: [0] Action: took 17925ms
+[13:18:25 INF] Run: Performed 1 action(s) in 17925ms
+[13:18:25 INF] Run: Performed 1 iteration(s) in 17925 - averaging 17925ms per iteration
+```
+
+</details>
 
 ## Benchmark description format
 The benchmark description is a high-level definition of code analysis that we want to benchmark. It consists of two parts:
@@ -67,7 +87,7 @@ Let's look at [inputs/fantomas.json](inputs/fantomas.json):
     // Full URL to a publicy-available Git repository
     "GitUrl": "https://github.com/fsprojects/fantomas",
     // Revision to use for 'git checkout' - using a commit hash rather than a branch/tag name guarantees reproducability
-    "Revision" : "0fe6785076e045f28e4c88e6a57dd09b649ce671"
+    "Revision" : "724087e0ffe09c6e1db040fe81b9986d90be8cc6"
   },
   // Commands to run to prepare a checked out codebase for `dotnet run`
   "CodebasePrep": [

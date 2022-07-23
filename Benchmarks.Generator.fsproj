@@ -4,6 +4,7 @@
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
         <OutputType>exe</OutputType>
         <RunWorkingDirectory>$(MSBuildProjectDirectory)</RunWorkingDirectory>
+        <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
     </PropertyGroup>
     <ItemGroup>
         <Compile Include="Dtos.fs" />
