@@ -1,0 +1,39 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net6.0</TargetFramework>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <OutputType>exe</OutputType>
+        <RootNamespace>BenchmarkRunner</RootNamespace>
+        <Configurations>Release</Configurations>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <FcsReferenceType Condition="'$(FcsReferenceType)' == ''">nuget</FcsReferenceType>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Compile Include="..\Dtos.fs">
+          <Link>Dtos.fs</Link>
+        </Compile>
+        <Compile Include="Runner.fs" />
+    </ItemGroup>
+
+    <!-- Reference FCS in one of two different ways -->
+
+    <!-- Reference the FCS NuGet package with the specified $FcsVersion -->
+    <ItemGroup Condition=" '$(FcsReferenceType)' == 'nuget' ">
+        <PackageReference Include="FSharp.Compiler.Service" Version="41.0.5" />
+    </ItemGroup>
+    <!-- Reference the dll specified in $FcsDllPath -->
+    <ItemGroup Condition=" '$(FcsReferenceType)' == 'dll' ">
+        <Reference Include="FSharp.Compiler.Service">
+            <HintPath>$(FcsDllPath)</HintPath>
+        </Reference>
+    </ItemGroup>
+
+    <ItemGroup>
+      <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
+    </ItemGroup>
+
+</Project>
