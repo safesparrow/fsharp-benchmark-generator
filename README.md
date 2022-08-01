@@ -33,6 +33,7 @@ graph LR;
 ### Process steps graph
 Below chart describes the steps performed during a benchmark run and their dependencies, including any preparation steps
 ```mermaid
+%%{init: {'theme':'base'}}%%
 graph TD;
     AA(description.json)
     AA-->A
