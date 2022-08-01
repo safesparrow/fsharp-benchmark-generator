@@ -14,19 +14,20 @@ Below chart describes dependencies of the two main components - generator and ru
 
 Note that the generator is completely independent from the runner, including having different FCS references. 
 ```mermaid
+%%{init: {'theme':'base'}}%%
 graph LR;
     subgraph Generation
         A1(Ionide.ProjInfo.FCS) --> A2(Benchmarks.Generator)
         A3 --> A1
         A3(FSharp.Compiler.Service NuGet) --> A2
-        style A3 fill:Blue
+        style A3 fill:#ddf
     end
 
     A2 -.->|JSON| R2
     
     subgraph Running
         R1(FSharp.Compiler.Service source or NuGet) --> R2(Benchmarks.Runner)
-        style R1 fill:green
+        style R1 fill:#dfd
     end
 ```
 ### Process steps graph
