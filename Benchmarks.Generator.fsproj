@@ -9,18 +9,21 @@
     <ItemGroup>
         <Compile Include="Dtos.fs" />
         <Compile Include="Generate.fs" />
-        <Content Include="inputs/local_example.json" CopyToOutputDirectory="PreserveNewest" />
-        <Content Include="inputs/50_leaves.json" CopyToOutputDirectory="PreserveNewest" />
-        <Content Include="inputs\stress_big_dense.json" CopyToOutputDirectory="PreserveNewest" />
-        <Content Include="inputs\fantomas.json">
-          <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-        </Content>
-        <Content Include=".gitignore" />
+        <None Include="inputs/local_example.json" />
+        <None Include="inputs/50_leaves.json" />
+        <None Include="inputs/stress_big_dense.json" />
+        <None Include="inputs/fantomas.json" />
+        <None Include=".gitignore" />
         <None Include="README.md" />
     </ItemGroup>
+    
+    <ItemGroup>
+        <PackageReference Include="Ionide.ProjInfo.FCS" Version="0.59.1" Condition="$(ProjInfoProjectPath) == ''" />
+        <ProjectReference Include="$(ProjInfoProjectPath)" Condition="$(ProjInfoProjectPath) != ''" />
+    </ItemGroup>
+    
     <ItemGroup>
       <PackageReference Include="CommandLineParser.FSharp" Version="2.9.1" />
-      <PackageReference Include="Ionide.ProjInfo.FCS" Version="0.59.1" />
       <PackageReference Include="LibGit2Sharp" Version="0.26.2" />
       <PackageReference Include="Microsoft.Build.Framework" Version="17.2.0" ExcludeAssets="runtime" />
       <PackageReference Include="Microsoft.Build.Locator" Version="1.4.1" />

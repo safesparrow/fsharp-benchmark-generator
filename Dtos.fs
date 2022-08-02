@@ -5,6 +5,8 @@
 module Benchmarks.Common.Dtos
 
 open System
+open System.Collections.Generic
+open System.Runtime.CompilerServices
 open Microsoft.FSharp.Reflection
 open FSharp.Compiler.CodeAnalysis
 open Newtonsoft.Json
@@ -20,9 +22,9 @@ and [<CLIMutable>] FSharpProjectOptionsDto =
     {
         ProjectFileName : string
         ProjectId : string option
-        SourceFiles : System.Collections.Generic.List<string>
-        OtherOptions: System.Collections.Generic.List<string>
-        ReferencedProjects: System.Collections.Generic.List<FSharpReferenceDto>
+        SourceFiles : List<string>
+        OtherOptions: List<string>
+        ReferencedProjects: List<FSharpReferenceDto>
         IsIncompleteTypeCheckEnvironment : bool
         UseScriptResolutionRules : bool
         LoadTime : DateTime
@@ -51,7 +53,7 @@ type BenchmarkConfig =
 [<CLIMutable>]
 type BenchmarkInputsDto =
     {
-        Actions : System.Collections.Generic.List<BenchmarkActionDto>
+        Actions : List<BenchmarkActionDto>
         Config : BenchmarkConfig
     }
 
@@ -73,90 +75,129 @@ type BenchmarkInputs =
         Config : BenchmarkConfig
     }
 
-let rec private referenceToDto (rp : FSharpReferencedProject) : FSharpReferenceDto =
-    // Reflection is needed since DU cases are internal.
-    // The alternative is to add an [<InternalsVisibleTo>] entry to the FCS project
-    let c, fields = FSharpValue.GetUnionFields(rp, typeof<FSharpReferencedProject>, true)
-    match c.Name with
-    | "FSharpReference" ->
-        let outputFile = fields[0] :?> string
-        let options = fields[1] :?> FSharpProjectOptions
-        let fakeOptions = optionsToDto options
+let private memoize fn =
+    let refComparer =
         {
-            FSharpReferenceDto.OutputFile = outputFile
-            FSharpReferenceDto.Options = fakeOptions
+            new IEqualityComparer<'a> with
+                member this.Equals(a, b) = obj.ReferenceEquals(a, b)
+                member this.GetHashCode(a) = RuntimeHelpers.GetHashCode(a)
         }
-    | _ -> failwith $"Unsupported {nameof(FSharpReferencedProject)} DU case: {c.Name}. only 'FSharpReference' is supported by the serializer"
+    let cache = Dictionary<_,_>(refComparer)
+    fun x ->
+        match cache.TryGetValue x with
+        | true, v -> v
+        | false, _ ->
+            let v = fn x
+            cache.Add(x,v)
+            v
 
-and private optionsToDto (o : FSharpProjectOptions) : FSharpProjectOptionsDto =
-    {
-        ProjectFileName = o.ProjectFileName
-        ProjectId = o.ProjectId
-        SourceFiles = o.SourceFiles |> System.Collections.Generic.List
-        OtherOptions = o.OtherOptions |> System.Collections.Generic.List
-        ReferencedProjects =
-            o.ReferencedProjects
-            |> Array.map referenceToDto
-            |> System.Collections.Generic.List
-        IsIncompleteTypeCheckEnvironment = o.IsIncompleteTypeCheckEnvironment
-        UseScriptResolutionRules = o.UseScriptResolutionRules
-        LoadTime = o.LoadTime
-        Stamp = o.Stamp
-    }
+let rec private referenceToDto =
+    fun (rp : FSharpReferencedProject) -> 
+        // Reflection is needed since DU cases are internal.
+        // The alternative is to add an [<InternalsVisibleTo>] entry to the FCS project
+        let c, fields = FSharpValue.GetUnionFields(rp, typeof<FSharpReferencedProject>, true)
+        match c.Name with
+        | "FSharpReference" ->
+            let outputFile = fields[0] :?> string
+            let options = fields[1] :?> FSharpProjectOptions
+            let fakeOptions = optionsToDto options
+            {
+                FSharpReferenceDto.OutputFile = outputFile
+                FSharpReferenceDto.Options = fakeOptions
+            }
+        | _ -> failwith $"Unsupported {nameof(FSharpReferencedProject)} DU case: {c.Name}. only 'FSharpReference' is supported by the serializer"
+    |> memoize
+
+and private optionsToDto =
+    let mutable stamp = 1L
+    let nextStamp () =
+        stamp <- stamp + 1L
+        stamp
+    fun (o : FSharpProjectOptions) ->
+        {
+            ProjectFileName = o.ProjectFileName
+            ProjectId = o.ProjectId
+            SourceFiles = o.SourceFiles |> List
+            OtherOptions = o.OtherOptions |> List
+            ReferencedProjects =
+                o.ReferencedProjects
+                |> Array.map referenceToDto
+                |> List
+            IsIncompleteTypeCheckEnvironment = o.IsIncompleteTypeCheckEnvironment
+            UseScriptResolutionRules = o.UseScriptResolutionRules
+            LoadTime = o.LoadTime
+            // We always override the Stamp provided.
+            // This is to avoid FCS spending a huge amount of time comparing projects when all Stamps are None
+            Stamp = nextStamp() |> Some 
+        }
+    |> memoize
         
-let actionToDto (action : BenchmarkAction) =
-    match action with
-    | BenchmarkAction.AnalyseFile x ->
+let actionToDto =
+    fun (action : BenchmarkAction) ->
+        match action with
+        | BenchmarkAction.AnalyseFile x ->
+            {
+                AnalyseFileDto.FileName = x.FileName
+                FileVersion = x.FileVersion
+                SourceText = x.SourceText
+                Options = x.Options |> optionsToDto
+            }
+            |> BenchmarkActionDto.AnalyseFile
+    |> memoize
+
+let inputsToDtos =
+    fun (inputs : BenchmarkInputs) ->
         {
-            AnalyseFileDto.FileName = x.FileName
-            FileVersion = x.FileVersion
-            SourceText = x.SourceText
-            Options = x.Options |> optionsToDto
+            BenchmarkInputsDto.Actions = inputs.Actions |> List.map actionToDto |> List
+            Config = inputs.Config
         }
-        |> BenchmarkActionDto.AnalyseFile
+    |> memoize
 
-let inputsToDtos (inputs : BenchmarkInputs) =
-    {
-        BenchmarkInputsDto.Actions = inputs.Actions |> List.map actionToDto |> System.Collections.Generic.List
-        Config = inputs.Config
-    }
-
-let rec private optionsFromDto (o : FSharpProjectOptionsDto) : FSharpProjectOptions =       
-    let fakeRP (rp : FSharpReferenceDto) : FSharpReferencedProject =
+let rec private fakeRP =
+    fun (rp : FSharpReferenceDto) ->
         let back = optionsFromDto rp.Options
         FSharpReferencedProject.CreateFSharp(rp.OutputFile, back)
-    {
-        ProjectFileName = o.ProjectFileName
-        ProjectId = o.ProjectId
-        SourceFiles = o.SourceFiles.ToArray()
-        OtherOptions = o.OtherOptions.ToArray()
-        ReferencedProjects =
-            o.ReferencedProjects.ToArray()
-            |> Array.map fakeRP            
-        IsIncompleteTypeCheckEnvironment = o.IsIncompleteTypeCheckEnvironment
-        UseScriptResolutionRules = o.UseScriptResolutionRules
-        LoadTime = o.LoadTime
-        UnresolvedReferences = None
-        OriginalLoadReferences = []
-        Stamp = o.Stamp
-    }
+    |> memoize
 
-let private actionFromDto (dto : BenchmarkActionDto) =
-    match dto with
-    | BenchmarkActionDto.AnalyseFile x ->
+and private optionsFromDto =
+    fun (o : FSharpProjectOptionsDto) ->
         {
-            AnalyseFile.FileName = x.FileName
-            FileVersion = x.FileVersion
-            SourceText = x.SourceText
-            Options = x.Options |> optionsFromDto
+            ProjectFileName = o.ProjectFileName
+            ProjectId = o.ProjectId
+            SourceFiles = o.SourceFiles.ToArray()
+            OtherOptions = o.OtherOptions.ToArray()
+            ReferencedProjects =
+                o.ReferencedProjects.ToArray()
+                |> Array.map fakeRP            
+            IsIncompleteTypeCheckEnvironment = o.IsIncompleteTypeCheckEnvironment
+            UseScriptResolutionRules = o.UseScriptResolutionRules
+            LoadTime = o.LoadTime
+            UnresolvedReferences = None
+            OriginalLoadReferences = []
+            Stamp = o.Stamp
         }
-        |> BenchmarkAction.AnalyseFile
+    |> memoize
 
-let private inputsFromDto (dto : BenchmarkInputsDto) =
-    {
-        BenchmarkInputs.Actions = dto.Actions.ToArray() |> Seq.map actionFromDto |> Seq.toList 
-        Config = dto.Config
-    }
+let private actionFromDto =
+    fun (dto : BenchmarkActionDto) ->
+        match dto with
+        | BenchmarkActionDto.AnalyseFile x ->
+            {
+                AnalyseFile.FileName = x.FileName
+                FileVersion = x.FileVersion
+                SourceText = x.SourceText
+                Options = x.Options |> optionsFromDto
+            }
+            |> BenchmarkAction.AnalyseFile
+    |> memoize
+
+let private inputsFromDto =
+    fun (dto : BenchmarkInputsDto) ->
+        {
+            BenchmarkInputs.Actions = dto.Actions.ToArray() |> Seq.map actionFromDto |> Seq.toList 
+            Config = dto.Config
+        }
+    |> memoize
 
 let jsonSerializerSettings =
     JsonSerializerSettings(
