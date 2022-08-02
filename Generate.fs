@@ -177,10 +177,14 @@ module Generate =
         if projects.Length = 0 then
             failwith $"No projects were loaded from {sln} - this indicates an error in cracking the projects"
         
-        let fsOptions =
-            projects
-            |> List.map (fun project -> Path.GetFileNameWithoutExtension(project.ProjectFileName), FCS.mapToFSharpProjectOptions project projects)
+        let fsOptions = FCS.mapManyOptions projects |> Seq.toList
+        
         fsOptions
+        |> List.zip projects
+        |> List.map (fun (project, fsOptions) ->
+            let name = Path.GetFileNameWithoutExtension(project.ProjectFileName)
+            name, fsOptions
+        )
         |> dict
     
     [<MethodImpl(MethodImplOptions.NoInlining)>]
