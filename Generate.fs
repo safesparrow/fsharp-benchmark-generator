@@ -249,7 +249,7 @@ module Generate =
                 "FcsDllPath", fcsDllPath 
             ]
     
-    let private prepareAndRun (config : Config) (case : BenchmarkCase) (doRun : bool) (cleanup : bool) =
+    let private prepareAndRun (config : Config) (case : BenchmarkCase) (dryRun : bool) (cleanup : bool) =
         let codebase = prepareCodebase config case
         let inputs = generateInputs case codebase.Path
         let inputsPath = makeInputsPath codebase.Path
@@ -258,7 +258,7 @@ module Generate =
         Directory.CreateDirectory(Path.GetDirectoryName(inputsPath)) |> ignore
         File.WriteAllText(inputsPath, serialized)
         
-        if doRun then
+        if dryRun = false then
             use _ = LogContext.PushProperty("step", "Run")
             let workingDir = "Benchmarks.Runner"
             let additionalEnvVariables =
@@ -290,8 +290,8 @@ module Generate =
             CheckoutsDir : string
             [<CommandLine.Option('i', Required = true, HelpText = "Path to the input file describing the benchmark")>]
             Input : string
-            [<CommandLine.Option(Default = true, HelpText = "If set to false, prepares the benchmark and prints the commandline to run it, then exits")>]
-            Run : bool
+            [<CommandLine.Option("dry-run", HelpText = "If set, prepares the benchmark and prints the commandline to run it, then exits")>]
+            DryRun : bool
             [<CommandLine.Option(Default = false, HelpText = "If set, removes the checkout directory afterwards. Doesn't apply to local codebases")>]
             Cleanup : bool
             [<CommandLine.Option('f', HelpText = "Path to the FSharp.Compiler.Service.dll to benchmark - by default a NuGet package is used instead")>]
@@ -345,7 +345,7 @@ module Generate =
                     reraise()
             
             use _ = LogContext.PushProperty("step", "PrepareAndRun")
-            prepareAndRun config case args.Run args.Cleanup
+            prepareAndRun config case args.DryRun args.Cleanup
         with ex ->
             if args.Verbose then
                 log.Fatal(ex, "Failure.")
