@@ -13,6 +13,7 @@
         <None Include="inputs/50_leaves.json" />
         <None Include="inputs/stress_big_dense.json" />
         <None Include="inputs/fantomas.json" />
+        <None Include="inputs/stress_huge_dense.json" />
         <None Include=".gitignore" />
         <None Include="README.md" />
     </ItemGroup>

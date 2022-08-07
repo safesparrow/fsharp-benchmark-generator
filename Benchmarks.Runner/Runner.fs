@@ -9,10 +9,14 @@ open Benchmarks.Common.Dtos
 type FCSBenchmark (config : BenchmarkConfig) =
     let checker = FSharpChecker.Create(projectCacheSize = config.ProjectCacheSize)
         
-    let failOnErrors (results : FSharpCheckFileResults) =
-        printfn $"{results.Diagnostics.Length} diagnostics calculated:"
-        for d in results.Diagnostics do
-            printfn $"- {d.Message}"
+    let printDiagnostics (results : FSharpCheckFileResults) =
+        match results.Diagnostics with
+        | [||] ->
+            printfn $"No issues found in code to report."
+        | diagnostics ->
+            printfn $"{results.Diagnostics.Length} issues/diagnostics found:"
+            for d in results.Diagnostics do
+                printfn $"- {d.Message}"
     
     let performAction (action : BenchmarkAction) =
         let sw = Stopwatch.StartNew()
@@ -25,7 +29,7 @@ type FCSBenchmark (config : BenchmarkConfig) =
                 match answer with
                 | FSharpCheckFileAnswer.Aborted -> failwith "checker aborted"
                 | FSharpCheckFileAnswer.Succeeded results ->
-                    failOnErrors results
+                    printDiagnostics results
                 action, ((result, answer) :> Object)
         res
             
