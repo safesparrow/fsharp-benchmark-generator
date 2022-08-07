@@ -299,7 +299,7 @@ module Generate =
             FcsDllPath : string option
             [<CommandLine.Option('n', Default = 1, HelpText = "Number of iterations to run")>]
             Iterations : int
-            [<CommandLine.Option('v', Default = false, HelpText = "Verbose logging. Includes output of ")>]
+            [<CommandLine.Option('v', Default = false, HelpText = "Verbose logging. Includes output of all preparation steps.")>]
             Verbose : bool
         }
     
