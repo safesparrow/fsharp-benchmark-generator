@@ -18,7 +18,7 @@
     </ItemGroup>
     
     <ItemGroup>
-        <PackageReference Include="Ionide.ProjInfo.FCS" Version="0.59.1" Condition="$(ProjInfoProjectPath) == ''" />
+        <PackageReference Include="Ionide.ProjInfo.FCS" Version="0.59.2" Condition="$(ProjInfoProjectPath) == ''" />
         <ProjectReference Include="$(ProjInfoProjectPath)" Condition="$(ProjInfoProjectPath) != ''" />
     </ItemGroup>
     
