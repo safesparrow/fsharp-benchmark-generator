@@ -9,7 +9,10 @@
     </PropertyGroup>
 
     <PropertyGroup>
+        <!-- By default reference FCS via NuGet -->
         <FcsReferenceType Condition="'$(FcsReferenceType)' == ''">nuget</FcsReferenceType>
+        <!-- By default use the latest official release of FCS -->
+        <FcsReferenceType Condition="'$(FcsNugetVersion)' == ''">41.0.5</FcsReferenceType>
     </PropertyGroup>
 
     <ItemGroup>
@@ -23,7 +26,7 @@
 
     <!-- Reference the FCS NuGet package with the specified $FcsVersion -->
     <ItemGroup Condition=" '$(FcsReferenceType)' == 'nuget' ">
-        <PackageReference Include="FSharp.Compiler.Service" Version="41.0.5" />
+        <PackageReference Include="FSharp.Compiler.Service" Version="$(FcsNugetVersion)" />
     </ItemGroup>
     <!-- Reference the dll specified in $FcsDllPath -->
     <ItemGroup Condition=" '$(FcsReferenceType)' == 'dll' ">

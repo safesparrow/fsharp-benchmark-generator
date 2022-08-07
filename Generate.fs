@@ -242,6 +242,7 @@ module Generate =
         let makeDefault () =
             [
                 "FcsReferenceType", "nuget"
+                "FcsNugetVersion", "41.0.5"
             ]
         let makeDll (fcsDllPath : string) =
             [
