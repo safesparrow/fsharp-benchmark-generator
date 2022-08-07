@@ -177,10 +177,14 @@ module Generate =
         if projects.Length = 0 then
             failwith $"No projects were loaded from {sln} - this indicates an error in cracking the projects"
         
-        let fsOptions =
-            projects
-            |> List.map (fun project -> Path.GetFileNameWithoutExtension(project.ProjectFileName), FCS.mapToFSharpProjectOptions project projects)
+        let fsOptions = FCS.mapManyOptions projects |> Seq.toList
+        
         fsOptions
+        |> List.zip projects
+        |> List.map (fun (project, fsOptions) ->
+            let name = Path.GetFileNameWithoutExtension(project.ProjectFileName)
+            name, fsOptions
+        )
         |> dict
     
     [<MethodImpl(MethodImplOptions.NoInlining)>]
@@ -238,6 +242,7 @@ module Generate =
         let makeDefault () =
             [
                 "FcsReferenceType", "nuget"
+                "FcsNugetVersion", "41.0.5"
             ]
         let makeDll (fcsDllPath : string) =
             [
@@ -245,7 +250,7 @@ module Generate =
                 "FcsDllPath", fcsDllPath 
             ]
     
-    let private prepareAndRun (config : Config) (case : BenchmarkCase) (doRun : bool) (cleanup : bool) =
+    let private prepareAndRun (config : Config) (case : BenchmarkCase) (dryRun : bool) (cleanup : bool) =
         let codebase = prepareCodebase config case
         let inputs = generateInputs case codebase.Path
         let inputsPath = makeInputsPath codebase.Path
@@ -254,7 +259,7 @@ module Generate =
         Directory.CreateDirectory(Path.GetDirectoryName(inputsPath)) |> ignore
         File.WriteAllText(inputsPath, serialized)
         
-        if doRun then
+        if dryRun = false then
             use _ = LogContext.PushProperty("step", "Run")
             let workingDir = "Benchmarks.Runner"
             let additionalEnvVariables =
@@ -286,15 +291,15 @@ module Generate =
             CheckoutsDir : string
             [<CommandLine.Option('i', Required = true, HelpText = "Path to the input file describing the benchmark")>]
             Input : string
-            [<CommandLine.Option(Default = true, HelpText = "If set to false, prepares the benchmark and prints the commandline to run it, then exits")>]
-            Run : bool
+            [<CommandLine.Option("dry-run", HelpText = "If set, prepares the benchmark and prints the commandline to run it, then exits")>]
+            DryRun : bool
             [<CommandLine.Option(Default = false, HelpText = "If set, removes the checkout directory afterwards. Doesn't apply to local codebases")>]
             Cleanup : bool
             [<CommandLine.Option('f', HelpText = "Path to the FSharp.Compiler.Service.dll to benchmark - by default a NuGet package is used instead")>]
             FcsDllPath : string option
             [<CommandLine.Option('n', Default = 1, HelpText = "Number of iterations to run")>]
             Iterations : int
-            [<CommandLine.Option('v', Default = false, HelpText = "Verbose logging. Includes output of ")>]
+            [<CommandLine.Option('v', Default = false, HelpText = "Verbose logging. Includes output of all preparation steps.")>]
             Verbose : bool
         }
     
@@ -341,7 +346,7 @@ module Generate =
                     reraise()
             
             use _ = LogContext.PushProperty("step", "PrepareAndRun")
-            prepareAndRun config case args.Run args.Cleanup
+            prepareAndRun config case args.DryRun args.Cleanup
         with ex ->
             if args.Verbose then
                 log.Fatal(ex, "Failure.")

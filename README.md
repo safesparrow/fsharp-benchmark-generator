@@ -57,9 +57,9 @@ graph TD;
     end
 ```
 ## How to use it
-### Run `Benchmark.Generator` to generate and run the benchmark
+### Run `Benchmark.Generator` to generate and run the benchmark using a locally-built FCS dll
 ```bash
-dotnet run -i inputs/50_leaves.json 
+dotnet run -i inputs/50_leaves.json -f Path/To/FSharp.Compiler.Service.dll 
 ```
 For more CLI options use `dotnet run --help`
 

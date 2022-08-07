@@ -9,7 +9,10 @@
     </PropertyGroup>
 
     <PropertyGroup>
+        <!-- By default reference FCS via NuGet -->
         <FcsReferenceType Condition="'$(FcsReferenceType)' == ''">nuget</FcsReferenceType>
+        <!-- By default use the latest official release of FCS -->
+        <FcsNugetVersion Condition="'$(FcsNugetVersion)' == ''">41.0.5</FcsNugetVersion>
     </PropertyGroup>
 
     <ItemGroup>
