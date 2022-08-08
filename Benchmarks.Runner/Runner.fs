@@ -27,8 +27,7 @@ type FCSBenchmark () =
         match action with
         | AnalyseFile x ->
             [1..x.Repeat]
-            |> List.map (fun it ->
-                printfn $"Iteration {it}"
+            |> List.map (fun _ ->
                 let result, answer =
                     checker.ParseAndCheckFileInProject(x.FileName, x.FileVersion, FSharp.Compiler.Text.SourceText.ofString x.SourceText, x.Options)
                     |> Async.RunSynchronously
