@@ -1,6 +1,6 @@
 ﻿{
   "Repo": {
-    "Name": "stress_big_dense",
+    "Name": "fsharp",
     "GitUrl": "https://github.com/dotnet/fsharp",
     "Revision" : "a7b668136cc720e50b92b0cae0f06081c5df1117"
   },

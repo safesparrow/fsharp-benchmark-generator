@@ -6,6 +6,7 @@ module Benchmarks.Common.Dtos
 
 open System
 open System.Collections.Generic
+open System.ComponentModel
 open System.Runtime.CompilerServices
 open Microsoft.FSharp.Reflection
 open FSharp.Compiler.CodeAnalysis
@@ -38,6 +39,8 @@ type AnalyseFileDto =
         FileVersion: int
         SourceText: string
         Options: FSharpProjectOptionsDto
+        [<DefaultValue(1)>]
+        Repeat : int
     }
 
 type BenchmarkActionDto =
@@ -64,6 +67,7 @@ type AnalyseFile =
         FileVersion: int
         SourceText: string
         Options: FSharpProjectOptions
+        Repeat: int
     }
 
 type BenchmarkAction =
@@ -141,6 +145,7 @@ let actionToDto =
                 FileVersion = x.FileVersion
                 SourceText = x.SourceText
                 Options = x.Options |> optionsToDto
+                Repeat = x.Repeat
             }
             |> BenchmarkActionDto.AnalyseFile
     |> memoize
@@ -187,6 +192,7 @@ let private actionFromDto =
                 FileVersion = x.FileVersion
                 SourceText = x.SourceText
                 Options = x.Options |> optionsFromDto
+                Repeat = x.Repeat
             }
             |> BenchmarkAction.AnalyseFile
     |> memoize

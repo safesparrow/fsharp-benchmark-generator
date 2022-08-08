@@ -1,13 +1,14 @@
 ﻿module Benchmarks.Runner
 
 open System
-open System.Diagnostics
 open System.IO
 open FSharp.Compiler.CodeAnalysis
+open BenchmarkDotNet.Attributes
+open BenchmarkDotNet.Running
 open Benchmarks.Common.Dtos
 
-type FCSBenchmark (config : BenchmarkConfig) =
-    let checker = FSharpChecker.Create(projectCacheSize = config.ProjectCacheSize)
+[<MemoryDiagnoser>]
+type FCSBenchmark () =
         
     let printDiagnostics (results : FSharpCheckFileResults) =
         match results.Diagnostics with
@@ -18,11 +19,16 @@ type FCSBenchmark (config : BenchmarkConfig) =
             for d in results.Diagnostics do
                 printfn $"- {d.Message}"
     
-    let performAction (action : BenchmarkAction) =
-        let sw = Stopwatch.StartNew()
-        let res =
-            match action with
-            | AnalyseFile x ->
+    let cleanCaches (checker : FSharpChecker) =
+        checker.InvalidateAll()
+        checker.ClearLanguageServiceRootCachesAndCollectAndFinalizeAllTransients()
+    
+    let performAction (checker : FSharpChecker) (action : BenchmarkAction) =
+        match action with
+        | AnalyseFile x ->
+            [1..x.Repeat]
+            |> List.map (fun it ->
+                printfn $"Iteration {it}"
                 let result, answer =
                     checker.ParseAndCheckFileInProject(x.FileName, x.FileVersion, FSharp.Compiler.Text.SourceText.ofString x.SourceText, x.Options)
                     |> Async.RunSynchronously
@@ -30,48 +36,39 @@ type FCSBenchmark (config : BenchmarkConfig) =
                 | FSharpCheckFileAnswer.Aborted -> failwith "checker aborted"
                 | FSharpCheckFileAnswer.Succeeded results ->
                     printDiagnostics results
-                action, ((result, answer) :> Object)
-        res
+                    cleanCaches checker
+                    action, (result, answer)
+            )
             
-    let cleanCaches () =
-        checker.InvalidateAll()
-        checker.ClearLanguageServiceRootCachesAndCollectAndFinalizeAllTransients()
+    let mutable setup : (FSharpChecker * BenchmarkAction list) option = None
         
-    member this.Checker = checker
-    member this.PerformAction action = performAction action
-    member this.CleanCaches () = cleanCaches
+    [<GlobalSetup>]
+    member _.Setup() =
+        let inputFile = Environment.GetEnvironmentVariable("FcsBenchmarkInput")
+        if File.Exists(inputFile) then
+            printfn $"Deserializing inputs from '{inputFile}'"
+            let json = File.ReadAllText(inputFile)
+            let inputs = deserializeInputs json
+            let checker = FSharpChecker.Create(projectCacheSize = inputs.Config.ProjectCacheSize)
+            setup <- (checker, inputs.Actions) |> Some
+        else
+            failwith $"Input file '{inputFile}' does not exist"
 
-let runIteration (inputs : BenchmarkInputs) =
-    let sw = Stopwatch.StartNew()
-    let b = FCSBenchmark(inputs.Config)
-    let outputs =
-        inputs.Actions
-        |> List.mapi (fun i action ->
-            printfn $"[{i}] Action: start"
-            let output = b.PerformAction action
-            printfn $"[{i}] Action: took {sw.ElapsedMilliseconds}ms"
-            output
-        )
-    printfn $"Performed {outputs.Length} action(s) in {sw.ElapsedMilliseconds}ms"
-    ()
+    [<Benchmark>]
+    member _.Run() =
+        match setup with
+        | None -> failwith "Setup did not run"
+        | Some (checker, actions) ->
+            for action in actions do
+                performAction checker action
+                |> ignore
+
+    [<IterationCleanup>]
+    member _.Cleanup() =
+        setup
+        |> Option.iter (fun (checker, _) -> cleanCaches checker)
 
 [<EntryPoint>]
 let main args =
-    match args with
-    | [|inputFile; iterations|] ->
-        let iterations = Int32.Parse iterations
-        printfn $"Deserializing inputs from '{inputFile}'"
-        let json = File.ReadAllText(inputFile)
-        let inputs = deserializeInputs json
-        printfn $"Running {iterations} iteration(s) of the benchmark, each containing {inputs.Actions.Length} action(s)"
-        let sw = Stopwatch.StartNew()
-        for i in 1..iterations do
-            runIteration inputs
-        sw.Stop()
-        let meanIterationTimeMs = sw.ElapsedMilliseconds/(int64)iterations
-        printfn $"Performed {iterations} iteration(s) in {sw.ElapsedMilliseconds} - averaging {meanIterationTimeMs}ms per iteration"
-        0
-    | _ ->
-        printfn $"Invalid args: %A{args}. Expected format: 'dotnet run [input file.json] [iterations]'"
-        1
-    
+    BenchmarkSwitcher.FromAssembly(typeof<FCSBenchmark>.Assembly).Run(args) |> ignore
+    0

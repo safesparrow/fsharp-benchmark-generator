@@ -103,13 +103,15 @@ module RepoSetup =
 [<RequireQualifiedAccess>]
 module Generate =
     
+    [<CLIMutable>]
     type CheckAction =
         {
             FileName : string
             ProjectName : string
+            [<JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)>]
+            [<System.ComponentModel.DefaultValue(1)>]
+            Repeat : int
         }
-
-    type CodebaseSourceType = Local | Git
 
     [<CLIMutable>]
     type CodebasePrepStep =
@@ -201,11 +203,11 @@ module Generate =
         log.Verbose("Generating actions")
         let actions =
             case.CheckActions
-            |> List.mapi (fun i {FileName = projectRelativeFileName; ProjectName = projectName} ->
+            |> List.mapi (fun i {FileName = projectRelativeFileName; ProjectName = projectName; Repeat = repeat} ->
                 let project = options[projectName]
                 let filePath = Path.Combine(Path.GetDirectoryName(project.ProjectFileName), projectRelativeFileName)
                 let fileText = File.ReadAllText(filePath)
-                BenchmarkAction.AnalyseFile {FileName = filePath; FileVersion = i; SourceText = fileText; Options = project}
+                BenchmarkAction.AnalyseFile {FileName = filePath; FileVersion = i; SourceText = fileText; Options = project; Repeat = repeat}
             )
         
         let config : BenchmarkConfig =
@@ -274,7 +276,7 @@ module Generate =
                 additionalEnvVariables
                 @ emptyProjInfoEnvironmentVariables()
             log.Information("Starting the benchmark")
-            Utils.runProcess "dotnet" $"run -c Release -- {inputsPath} {config.Iterations}" workingDir envVariables LogEventLevel.Information
+            Utils.runProcess "dotnet" $"run -c Release -- --strategy ColdStart --filter *FCSBenchmark* --envVars=FcsBenchmarkInput:{inputsPath}" workingDir envVariables LogEventLevel.Information
         else
             log.Information("Not running the benchmark as requested")
             
