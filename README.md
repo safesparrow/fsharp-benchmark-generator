@@ -123,7 +123,9 @@ Let's look at [inputs/fantomas.json](inputs/fantomas.json):
     {
       "FileName": "Integration/DaemonTests.fs",
       // This is a project name only - not project file's path (we currently assume names are unique)
-      "ProjectName": "Fantomas.Tests"
+      "ProjectName": "Fantomas.Tests",
+      // Run this action once
+      "Repeat": 1
     }
   ]
 }
