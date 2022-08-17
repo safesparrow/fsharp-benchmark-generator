@@ -3,6 +3,7 @@
 open System
 open System.Diagnostics
 open System.IO
+open System.Reflection
 open System.Runtime.CompilerServices
 open Benchmarks.Common.Dtos
 open CommandLine
@@ -318,7 +319,7 @@ module Generate =
         
         if dryRun = false then
             use _ = LogContext.PushProperty("step", "Run")
-            let workingDir = "Benchmarks.Runner"
+            let workingDir = Path.Combine(Path.GetDirectoryName(Assembly.GetAssembly(typeof<RepoSetup.RepoSpec>).Location), "Benchmarks.Runner")
             let additionalEnvVariables =
                 match config.FcsDllPath with
                 | None -> MSBuildProps.makeDefault()
@@ -421,23 +422,12 @@ module Generate =
             else
                 log.Fatal(ex, "Failure. Consider using --verbose for extra information.")
             
-    
-    let help result (errors : Error seq) =
-        let helpText =
-            let f (h:HelpText) =
-                h.AdditionalNewLineAfterOption <- false
-                h.Heading <- "FCS Benchmark Generator"
-                h
-            HelpText.AutoBuild(result, f, id)
-        printfn $"{helpText}"
-    
     [<EntryPoint>]
     [<MethodImpl(MethodImplOptions.NoInlining)>]
     let main args =
         let parseResult = Parser.Default.ParseArguments<Args> args
         parseResult
             .WithParsed(run)
-            .WithNotParsed(fun errors -> help parseResult errors)
         |> ignore        
         
         if parseResult.Tag = ParserResultType.Parsed then 0 else 1
