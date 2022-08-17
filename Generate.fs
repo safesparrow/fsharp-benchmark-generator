@@ -3,6 +3,7 @@
 open System
 open System.Diagnostics
 open System.IO
+open System.Reflection
 open System.Runtime.CompilerServices
 open Benchmarks.Common.Dtos
 open CommandLine
@@ -318,7 +319,7 @@ module Generate =
         
         if dryRun = false then
             use _ = LogContext.PushProperty("step", "Run")
-            let workingDir = "Benchmarks.Runner"
+            let workingDir = Path.Combine(Path.GetDirectoryName(Assembly.GetAssembly(typeof<RepoSetup.RepoSpec>).Location), "Benchmarks.Runner")
             let additionalEnvVariables =
                 match config.FcsDllPath with
                 | None -> MSBuildProps.makeDefault()

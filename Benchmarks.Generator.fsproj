@@ -14,7 +14,8 @@
         
     </PropertyGroup>
     <ItemGroup>
-        <Compile Include="Dtos.fs" />
+        <!-- Copied for use in Benchmarks.Runner -->
+        <Compile CopyToOutputDirectory="PreserveNewest" Include="Dtos.fs" />
         <Compile Include="Generate.fs" />
         <None Include="inputs/local_example.json" />
         <None Include="inputs/50_leaves.json" />
