@@ -84,7 +84,7 @@ module RepoSetup =
             GitUrl : string
             Revision : string
         }
-            with override this.ToString() = $"{this.Name} ({this.GitUrl}) at revision {this.Revision}"
+            with override this.ToString() = $"{this.Name} ({this.GitUrl}) @ {this.Revision}"
         
     type Config =
         {
@@ -276,13 +276,13 @@ module Generate =
     let private resultsJsonPath (bdnArtifactDir : string) (benchmarkName : string) =
         Path.Combine(bdnArtifactDir, $@"results/{benchmarkName}-report.json")
     
-    type RunResults =
+    type RunResultSummary =
         {
             MeanS : double
             AllocatedMB : double
         }
     
-    let extractResultsFromJson (summary : JObject) : RunResults =
+    let extractResultsFromJson (summary : JObject) : RunResultSummary =
         let benchmark = summary["Benchmarks"][0]
         let stats = benchmark["Statistics"]
         let meanMicros = stats["Mean"].ToString() |> Double.Parse
@@ -296,8 +296,14 @@ module Generate =
             
         { MeanS = Math.Round(meanMicros / 1000000000.0, 3); AllocatedMB = Math.Round(allocatedBytes / 1024.0 / 1024.0, 3) }
         
-    let readBasicJsonResults (bdnArtifactDir : string) (benchmarkName : string) =
-        let json = File.ReadAllText(resultsJsonPath bdnArtifactDir benchmarkName)
+    let private readBasicJsonResults (bdnArtifactsDir : string) (benchmarkClass : string) =
+        let json = File.ReadAllText(resultsJsonPath bdnArtifactsDir benchmarkClass)
+        let jObject = JsonConvert.DeserializeObject<JObject>(json)
+        extractResultsFromJson jObject
+    
+    let private readJsonResultsSummary (bdnArtifactsDir : string) (benchmarkClass : string) =
+        let jsonResultsPath = resultsJsonPath bdnArtifactsDir benchmarkClass
+        let json = File.ReadAllText(jsonResultsPath)
         let jObject = JsonConvert.DeserializeObject<JObject>(json)
         extractResultsFromJson jObject
     
@@ -326,15 +332,15 @@ module Generate =
                 @ emptyProjInfoEnvironmentVariables()
             let bdnArtifactsDir = Path.Combine(workingDir, "BenchmarkDotNet.Artifacts")
             let benchmarkClass = "Benchmarks.Runner.FCSBenchmark"
-            log.Information("Starting the benchmark. Full BDN output can be found in {artifactFiles}", $"{bdnArtifactsDir}/*.log")
             let iterationCountString = match config.Iterations with Some iterations -> $"--iterationCount={iterations}" | None -> ""
-            Utils.runProcess "dotnet" $"run -c Release -- --filter {benchmarkClass}.Run --envVars=FcsBenchmarkInput:{inputsPath} {iterationCountString} {bdnArgs |> Option.defaultValue String.Empty}" workingDir envVariables LogEventLevel.Verbose
-            let jsonResultsPath = resultsJsonPath bdnArtifactsDir benchmarkClass
-            let json = File.ReadAllText(jsonResultsPath)
-            let jObject = JsonConvert.DeserializeObject<JObject>(json)
-            let res = extractResultsFromJson jObject
-            log.Information("Results summary: Mean={mean:0.#}s, Allocated={allocatedMB:0}MB", res.MeanS, res.AllocatedMB)
-            log.Information("Detailed results can be found in {resultsDir}", Path.Combine(bdnArtifactsDir, "results"))
+            let exe = "dotnet"
+            let args = $"run -c Release -- --filter {benchmarkClass}.Run --envVars=FcsBenchmarkInput:{inputsPath} {iterationCountString} {bdnArgs |> Option.defaultValue String.Empty}".Trim()
+            log.Information("Starting the benchmark. Full BDN output can be found in {artifactFiles}. Full commandline: '{exe} {args}' in '{dir}'.", $"{bdnArtifactsDir}/*.log", exe, args, workingDir)
+            Utils.runProcess exe args workingDir envVariables LogEventLevel.Verbose
+            
+            let res = readJsonResultsSummary bdnArtifactsDir benchmarkClass
+            log.Information("Detailed results can be found in {resultsDir}.", Path.Combine(bdnArtifactsDir, "results"))
+            log.Information("Result summary: Mean={mean:0.#}s, Allocated={allocatedMB:0}MB.", res.MeanS, res.AllocatedMB)
         else
             log.Information("Not running the benchmark as requested")
             

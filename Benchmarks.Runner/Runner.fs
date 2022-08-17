@@ -17,11 +17,10 @@ type FCSBenchmark () =
         
     let printDiagnostics (results : FSharpCheckFileResults) =
         match results.Diagnostics with
-        | [||] ->
-            printfn $"No issues found in code to report."
+        | [||] -> ()
         | diagnostics ->
-            printfn $"{results.Diagnostics.Length} issues/diagnostics found:"
-            for d in results.Diagnostics do
+            printfn $"{diagnostics.Length} issues/diagnostics found:"
+            for d in diagnostics do
                 printfn $"- {d.Message}"
     
     let cleanCaches (checker : FSharpChecker) =
