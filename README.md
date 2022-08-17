@@ -59,7 +59,7 @@ graph TD;
 ## How to use it
 ### Run `Benchmark.Generator` to generate and run the benchmark using a locally-built FCS dll
 ```bash
-dotnet run -i inputs/50_leaves.json -f Path/To/FSharp.Compiler.Service.dll 
+dotnet run -- -i .\inputs\fantomas.json -n 1 -f Path/To/FSharp.Compiler.Service.dll 
 ```
 For more CLI options use `dotnet run --help`
 
@@ -67,19 +67,14 @@ For more CLI options use `dotnet run --help`
 <summary>Sample output:</summary>
 
 ```bash
-[13:17:58 INF] PrepareCodebase: Preparing repo 50_leaves - https://github.com/safesparrow/fsharp-samples at revision 744ada94e1fffda8d622f817f6b7642a0d17e4f0
-[13:17:58 INF] PrepareCodebase: .artifacts\50_leaves\744ada94e1fffda8d622f817f6b7642a0d17e4f0 already exists - will assume the correct repository is already checked out
-[13:17:58 INF] PrepareCodebase: Running 1 codebase prep steps
-[13:18:06 INF] LoadOptions: 51 projects loaded from D:\projekty\ftest\fsharp-benchmark-generator\.artifacts\50_leaves\744ada94e1fffda8d622f817f6b7642a0d17e4f0\50_leaves/solution.sln
-[13:18:06 INF] PrepareAndRun: Serializing inputs as D:\projekty\ftest\fsharp-benchmark-generator\.artifacts\50_leaves\744ada94e1fffda8d622f817f6b7642a0d17e4f0\.artifacts\2022-07-23_12-18-06.fcsinputs.json
-[13:18:06 INF] Run: Starting the benchmark
-[13:18:06 INF] Run: Deserializing inputs from 'D:\projekty\ftest\fsharp-benchmark-generator\.artifacts\50_leaves\744ada94e1fffda8d622f817f6b7642a0d17e4f0\.artifacts\2022-07-23_12-18-06.fcsinputs.json'
-[13:18:07 INF] Run: Running 1 iteration(s) of the benchmark, each containing 1 action(s)
-[13:18:07 INF] Run: [0] Action: start
-[13:18:25 INF] Run: 0 diagnostics calculated:
-[13:18:25 INF] Run: [0] Action: took 17925ms
-[13:18:25 INF] Run: Performed 1 action(s) in 17925ms
-[13:18:25 INF] Run: Performed 1 iteration(s) in 17925 - averaging 17925ms per iteration
+[23:37:42 INF] PrepareCodebase: Preparing repo fantomas (https://github.com/fsprojects/fantomas) @ 0fe6785076e045f28e4c88e6a57dd09b649ce671
+[23:37:42 INF] PrepareCodebase: .artifacts\fantomas\0fe6785076e045f28e4c88e6a57dd09b649ce671 already exists - will assume the correct repository is already checked out
+[23:37:42 INF] PrepareCodebase: Running 3 codebase prep steps
+[23:37:45 INF] LoadOptions: 7 projects loaded from C:\projekty\fsharp\fsharp-benchmark-generator\.artifacts\fantomas\0fe6785076e045f28e4c88e6a57dd09b649ce671\fantomas.sln
+[23:37:45 INF] PrepareAndRun: Serializing inputs as C:\projekty\fsharp\fsharp-benchmark-generator\.artifacts\fantomas\0fe6785076e045f28e4c88e6a57dd09b649ce671\.artifacts\2022-08-17_22-37-45.fcsinputs.json
+[23:37:45 INF] Run: Starting the benchmark. Full BDN output can be found in Benchmarks.Runner\BenchmarkDotNet.Artifacts/*.log. Full commandline: 'dotnet run -c Release -- --filter Benchmarks.Runner.FCSBenchmark.Run --envVars=FcsBenchmarkInput:C:\projekty\fsharp\fsharp-benchmark-generator\.artifacts\fantomas\0fe6785076e045f28e4c88e6a57dd09b649ce671\.artifacts\2022-08-17_22-37-45.fcsinputs.json --iterationCount=1' in 'Benchmarks.Runner'.
+[23:38:13 INF] Run: Detailed results can be found in Benchmarks.Runner\BenchmarkDotNet.Artifacts\results.
+[23:38:13 INF] Run: Result summary: Mean=13.5s, Allocated=4209MB.
 ```
 
 </details>
@@ -123,7 +118,9 @@ Let's look at [inputs/fantomas.json](inputs/fantomas.json):
     {
       "FileName": "Integration/DaemonTests.fs",
       // This is a project name only - not project file's path (we currently assume names are unique)
-      "ProjectName": "Fantomas.Tests"
+      "ProjectName": "Fantomas.Tests",
+      // Run this action once
+      "Repeat": 1
     }
   ]
 }

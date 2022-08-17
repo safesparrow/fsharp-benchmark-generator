@@ -3,9 +3,11 @@
 /// It's shared via link rather than a library.
 /// There is no easy way for the two projects to reference a shared F# library because they have different FSharp.Core references
 module Benchmarks.Common.Dtos
+#nowarn "40"
 
 open System
 open System.Collections.Generic
+open System.ComponentModel
 open System.Runtime.CompilerServices
 open Microsoft.FSharp.Reflection
 open FSharp.Compiler.CodeAnalysis
@@ -38,6 +40,8 @@ type AnalyseFileDto =
         FileVersion: int
         SourceText: string
         Options: FSharpProjectOptionsDto
+        [<DefaultValue(1)>]
+        Repeat : int
     }
 
 type BenchmarkActionDto =
@@ -64,6 +68,7 @@ type AnalyseFile =
         FileVersion: int
         SourceText: string
         Options: FSharpProjectOptions
+        Repeat: int
     }
 
 type BenchmarkAction =
@@ -141,6 +146,7 @@ let actionToDto =
                 FileVersion = x.FileVersion
                 SourceText = x.SourceText
                 Options = x.Options |> optionsToDto
+                Repeat = x.Repeat
             }
             |> BenchmarkActionDto.AnalyseFile
     |> memoize
@@ -187,6 +193,7 @@ let private actionFromDto =
                 FileVersion = x.FileVersion
                 SourceText = x.SourceText
                 Options = x.Options |> optionsFromDto
+                Repeat = x.Repeat
             }
             |> BenchmarkAction.AnalyseFile
     |> memoize

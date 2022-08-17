@@ -11,6 +11,7 @@ open FSharp.Compiler.CodeAnalysis
 open Ionide.ProjInfo
 open Ionide.ProjInfo.Types
 open Newtonsoft.Json
+open Newtonsoft.Json.Linq
 open Serilog
 open Serilog.Context
 open Serilog.Events
@@ -20,6 +21,7 @@ let mutable private log : ILogger = null
 /// General utilities
 [<RequireQualifiedAccess>]
 module Utils =
+    
     let runProcess name args workingDir (envVariables : (string * string) list) (outputLogLevel : LogEventLevel) =
         let info = ProcessStartInfo()
         info.WindowStyle <- ProcessWindowStyle.Hidden
@@ -38,7 +40,10 @@ module Utils =
         let p = new Process(StartInfo = info)
         p.EnableRaisingEvents <- true
         p.OutputDataReceived.Add(fun args -> log.Write(outputLogLevel, args.Data))
-        p.ErrorDataReceived.Add(fun args -> log.Error(args.Data))
+        p.ErrorDataReceived.Add(fun args ->
+            log.Information(args.Data)
+            log.Error(args.Data)
+        )
         p.Start() |> ignore
         p.BeginErrorReadLine()
         p.BeginOutputReadLine()
@@ -79,7 +84,7 @@ module RepoSetup =
             GitUrl : string
             Revision : string
         }
-            with override this.ToString() = $"{this.Name} - {this.GitUrl} at revision {this.Revision}"
+            with override this.ToString() = $"{this.Name} ({this.GitUrl}) @ {this.Revision}"
         
     type Config =
         {
@@ -103,13 +108,15 @@ module RepoSetup =
 [<RequireQualifiedAccess>]
 module Generate =
     
+    [<CLIMutable>]
     type CheckAction =
         {
             FileName : string
             ProjectName : string
+            [<JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)>]
+            [<System.ComponentModel.DefaultValue(1)>]
+            Repeat : int
         }
-
-    type CodebaseSourceType = Local | Git
 
     [<CLIMutable>]
     type CodebasePrepStep =
@@ -138,7 +145,7 @@ module Generate =
         {
             CheckoutBaseDir : string
             FcsDllPath : string option // defaults to a NuGet package
-            Iterations : int
+            Iterations : int option
         }
     
     type Codebase =
@@ -166,13 +173,29 @@ module Generate =
         )
         codebase
     
+    let private withRedirectedConsole<'a> (f : unit -> 'a) =
+        let originalOut = Console.Out
+        let originalError = Console.Error
+        use out = new StringWriter()
+        use error = new StringWriter()
+        Console.SetOut(out)
+        Console.SetError(error)
+        let res = f()
+        Console.SetOut(originalOut)
+        Console.SetOut(originalError)
+        res, (out.ToString(), error.ToString())
+    
     [<MethodImpl(MethodImplOptions.NoInlining)>]
     let private doLoadOptions (toolsPath : ToolsPath) (sln : string) =
         // TODO allow customization of build properties
         let props = []
         let loader = WorkspaceLoader.Create(toolsPath, props)
-        let vs = Microsoft.Build.Locator.MSBuildLocator.RegisterDefaults()        
-        let projects = loader.LoadSln(sln, [], BinaryLogGeneration.Off) |> Seq.toList
+        let vs = Microsoft.Build.Locator.MSBuildLocator.RegisterDefaults()
+        
+        let projects, _ =
+            fun () -> loader.LoadSln(sln, [], BinaryLogGeneration.Off) |> Seq.toList
+            |> withRedirectedConsole
+            
         log.Information("{projectsCount} projects loaded from {sln}", projects.Length, sln)
         if projects.Length = 0 then
             failwith $"No projects were loaded from {sln} - this indicates an error in cracking the projects"
@@ -201,11 +224,11 @@ module Generate =
         log.Verbose("Generating actions")
         let actions =
             case.CheckActions
-            |> List.mapi (fun i {FileName = projectRelativeFileName; ProjectName = projectName} ->
+            |> List.mapi (fun i {FileName = projectRelativeFileName; ProjectName = projectName; Repeat = repeat} ->
                 let project = options[projectName]
                 let filePath = Path.Combine(Path.GetDirectoryName(project.ProjectFileName), projectRelativeFileName)
                 let fileText = File.ReadAllText(filePath)
-                BenchmarkAction.AnalyseFile {FileName = filePath; FileVersion = i; SourceText = fileText; Options = project}
+                BenchmarkAction.AnalyseFile {FileName = filePath; FileVersion = i; SourceText = fileText; Options = project; Repeat = repeat}
             )
         
         let config : BenchmarkConfig =
@@ -237,7 +260,7 @@ module Generate =
     let private emptyProjInfoEnvironmentVariables () =
         projInfoEnvVariables
         |> List.map (fun var -> var, "")
-    
+        
     module MSBuildProps =
         let makeDefault () =
             [
@@ -250,7 +273,41 @@ module Generate =
                 "FcsDllPath", fcsDllPath 
             ]
     
-    let private prepareAndRun (config : Config) (case : BenchmarkCase) (dryRun : bool) (cleanup : bool) =
+    let private resultsJsonPath (bdnArtifactDir : string) (benchmarkName : string) =
+        Path.Combine(bdnArtifactDir, $@"results/{benchmarkName}-report.json")
+    
+    type RunResultSummary =
+        {
+            MeanS : double
+            AllocatedMB : double
+        }
+    
+    let extractResultsFromJson (summary : JObject) : RunResultSummary =
+        let benchmark = summary["Benchmarks"][0]
+        let stats = benchmark["Statistics"]
+        let meanMicros = stats["Mean"].ToString() |> Double.Parse
+        
+        let metrics = benchmark["Metrics"] :?> JArray
+        let allocatedBytes =
+            let found =
+                metrics
+                |> Seq.find (fun m -> (m["Descriptor"]["Id"]).ToString() = "Allocated Memory")
+            found["Value"].ToString() |> Double.Parse
+            
+        { MeanS = Math.Round(meanMicros / 1000000000.0, 3); AllocatedMB = Math.Round(allocatedBytes / 1024.0 / 1024.0, 3) }
+        
+    let private readBasicJsonResults (bdnArtifactsDir : string) (benchmarkClass : string) =
+        let json = File.ReadAllText(resultsJsonPath bdnArtifactsDir benchmarkClass)
+        let jObject = JsonConvert.DeserializeObject<JObject>(json)
+        extractResultsFromJson jObject
+    
+    let private readJsonResultsSummary (bdnArtifactsDir : string) (benchmarkClass : string) =
+        let jsonResultsPath = resultsJsonPath bdnArtifactsDir benchmarkClass
+        let json = File.ReadAllText(jsonResultsPath)
+        let jObject = JsonConvert.DeserializeObject<JObject>(json)
+        extractResultsFromJson jObject
+    
+    let private prepareAndRun (config : Config) (case : BenchmarkCase) (dryRun : bool) (cleanup : bool) (bdnArgs : string option) =
         let codebase = prepareCodebase config case
         let inputs = generateInputs case codebase.Path
         let inputsPath = makeInputsPath codebase.Path
@@ -273,8 +330,17 @@ module Generate =
             let envVariables =
                 additionalEnvVariables
                 @ emptyProjInfoEnvironmentVariables()
-            log.Information("Starting the benchmark")
-            Utils.runProcess "dotnet" $"run -c Release -- {inputsPath} {config.Iterations}" workingDir envVariables LogEventLevel.Information
+            let bdnArtifactsDir = Path.Combine(workingDir, "BenchmarkDotNet.Artifacts")
+            let benchmarkClass = "Benchmarks.Runner.FCSBenchmark"
+            let iterationCountString = match config.Iterations with Some iterations -> $"--iterationCount={iterations}" | None -> ""
+            let exe = "dotnet"
+            let args = $"run -c Release -- --filter {benchmarkClass}.Run --envVars=FcsBenchmarkInput:{inputsPath} {iterationCountString} {bdnArgs |> Option.defaultValue String.Empty}".Trim()
+            log.Information("Starting the benchmark. Full BDN output can be found in {artifactFiles}. Full commandline: '{exe} {args}' in '{dir}'.", $"{bdnArtifactsDir}/*.log", exe, args, workingDir)
+            Utils.runProcess exe args workingDir envVariables LogEventLevel.Verbose
+            
+            let res = readJsonResultsSummary bdnArtifactsDir benchmarkClass
+            log.Information("Detailed results can be found in {resultsDir}.", Path.Combine(bdnArtifactsDir, "results"))
+            log.Information("Result summary: Mean={mean:0.#}s, Allocated={allocatedMB:0}MB.", res.MeanS, res.AllocatedMB)
         else
             log.Information("Not running the benchmark as requested")
             
@@ -295,12 +361,14 @@ module Generate =
             DryRun : bool
             [<CommandLine.Option(Default = false, HelpText = "If set, removes the checkout directory afterwards. Doesn't apply to local codebases")>]
             Cleanup : bool
-            [<CommandLine.Option('f', HelpText = "Path to the FSharp.Compiler.Service.dll to benchmark - by default a NuGet package is used instead")>]
+            [<CommandLine.Option('f', "fcsdll", HelpText = "Path to the FSharp.Compiler.Service.dll to benchmark - by default a NuGet package is used instead")>]
             FcsDllPath : string option
-            [<CommandLine.Option('n', Default = 1, HelpText = "Number of iterations to run")>]
-            Iterations : int
-            [<CommandLine.Option('v', Default = false, HelpText = "Verbose logging. Includes output of all preparation steps.")>]
+            [<CommandLine.Option('n', "iterations", HelpText = "Number of iterations to run")>]
+            Iterations : int option
+            [<CommandLine.Option('v', "verbose", Default = false, HelpText = "Verbose logging. Includes output of all preparation steps.")>]
             Verbose : bool
+            [<CommandLine.Option('b', "bdnargs", HelpText = "Additional BDN arguments as a single string")>]
+            BdnArgs : string option
         }
     
     let run (args : Args) =
@@ -346,7 +414,7 @@ module Generate =
                     reraise()
             
             use _ = LogContext.PushProperty("step", "PrepareAndRun")
-            prepareAndRun config case args.DryRun args.Cleanup
+            prepareAndRun config case args.DryRun args.Cleanup args.BdnArgs
         with ex ->
             if args.Verbose then
                 log.Fatal(ex, "Failure.")
