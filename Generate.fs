@@ -297,11 +297,11 @@ module Generate =
             DryRun : bool
             [<CommandLine.Option(Default = false, HelpText = "If set, removes the checkout directory afterwards. Doesn't apply to local codebases")>]
             Cleanup : bool
-            [<CommandLine.Option('f', HelpText = "Path to the FSharp.Compiler.Service.dll to benchmark - by default a NuGet package is used instead")>]
+            [<CommandLine.Option('f', "fcsdll", HelpText = "Path to the FSharp.Compiler.Service.dll to benchmark - by default a NuGet package is used instead")>]
             FcsDllPath : string option
-            [<CommandLine.Option('n', Default = 1, HelpText = "Number of iterations to run")>]
+            [<CommandLine.Option('n', "iterations", Default = 1, HelpText = "Number of iterations to run")>]
             Iterations : int
-            [<CommandLine.Option('v', Default = false, HelpText = "Verbose logging. Includes output of all preparation steps.")>]
+            [<CommandLine.Option('v', "verbose", Default = false, HelpText = "Verbose logging. Includes output of all preparation steps.")>]
             Verbose : bool
         }
     
