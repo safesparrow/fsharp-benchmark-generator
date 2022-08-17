@@ -421,23 +421,12 @@ module Generate =
             else
                 log.Fatal(ex, "Failure. Consider using --verbose for extra information.")
             
-    
-    let help result (errors : Error seq) =
-        let helpText =
-            let f (h:HelpText) =
-                h.AdditionalNewLineAfterOption <- false
-                h.Heading <- "FCS Benchmark Generator"
-                h
-            HelpText.AutoBuild(result, f, id)
-        printfn $"{helpText}"
-    
     [<EntryPoint>]
     [<MethodImpl(MethodImplOptions.NoInlining)>]
     let main args =
         let parseResult = Parser.Default.ParseArguments<Args> args
         parseResult
             .WithParsed(run)
-            .WithNotParsed(fun errors -> help parseResult errors)
         |> ignore        
         
         if parseResult.Tag = ParserResultType.Parsed then 0 else 1
