@@ -6,7 +6,6 @@ open BenchmarkDotNet.Configs
 open BenchmarkDotNet.Engines
 open BenchmarkDotNet.Exporters.Json
 open BenchmarkDotNet.Jobs
-open BenchmarkDotNet.Loggers
 open FSharp.Compiler.CodeAnalysis
 open BenchmarkDotNet.Attributes
 open BenchmarkDotNet.Running
