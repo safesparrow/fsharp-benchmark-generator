@@ -82,7 +82,7 @@ let private defaultConfig () =
             .WithUnrollFactor(1)
             .WithStrategy(RunStrategy.ColdStart)
             .AsDefault()
-    ).AddExporter(JsonExporter())
+    ).AddExporter(JsonExporter(indentJson = true))
 
 [<EntryPoint>]
 let main args =
