@@ -3,6 +3,7 @@
 /// It's shared via link rather than a library.
 /// There is no easy way for the two projects to reference a shared F# library because they have different FSharp.Core references
 module Benchmarks.Common.Dtos
+#nowarn "40"
 
 open System
 open System.Collections.Generic

@@ -2,6 +2,11 @@
 
 open System
 open System.IO
+open BenchmarkDotNet.Configs
+open BenchmarkDotNet.Engines
+open BenchmarkDotNet.Exporters.Json
+open BenchmarkDotNet.Jobs
+open BenchmarkDotNet.Loggers
 open FSharp.Compiler.CodeAnalysis
 open BenchmarkDotNet.Attributes
 open BenchmarkDotNet.Running
@@ -67,7 +72,20 @@ type FCSBenchmark () =
         setup
         |> Option.iter (fun (checker, _) -> cleanCaches checker)
 
+let private defaultConfig () =
+    DefaultConfig.Instance.AddJob(
+        Job.Default
+            .WithWarmupCount(0)
+            .WithIterationCount(1)
+            .WithLaunchCount(1)
+            .WithInvocationCount(1)
+            .WithUnrollFactor(1)
+            .WithStrategy(RunStrategy.ColdStart)
+            .AsDefault()
+    ).AddExporter(JsonExporter())
+
 [<EntryPoint>]
 let main args =
-    BenchmarkSwitcher.FromAssembly(typeof<FCSBenchmark>.Assembly).Run(args) |> ignore
+    BenchmarkSwitcher.FromAssembly(typeof<FCSBenchmark>.Assembly).Run(args, defaultConfig())
+    |> ignore
     0
