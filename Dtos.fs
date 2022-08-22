@@ -218,3 +218,8 @@ let serializeInputs (inputs : BenchmarkInputs) : string =
 let deserializeInputs (json : string) : BenchmarkInputs =
     let dto = JsonConvert.DeserializeObject<BenchmarkInputsDto>(json, jsonSerializerSettings)
     inputsFromDto dto
+    
+[<RequireQualifiedAccess>]
+type NuGetFCSVersion =
+    | Official of version : string
+    | Local of sourceDir : string

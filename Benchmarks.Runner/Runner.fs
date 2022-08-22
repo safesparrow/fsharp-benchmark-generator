@@ -10,6 +10,7 @@ open FSharp.Compiler.CodeAnalysis
 open BenchmarkDotNet.Attributes
 open BenchmarkDotNet.Running
 open Benchmarks.Common.Dtos
+open CommandLine
 
 [<MemoryDiagnoser>]
 type FCSBenchmark () =
@@ -73,10 +74,6 @@ type FCSBenchmark () =
 let fcsPackageName = "FSharp.Compiler.Service"
 
 module NuGet =
-    [<RequireQualifiedAccess>]
-    type NuGetFCSVersion =
-        | Official of version : string
-        | Local of sourceDir : string
 
     let officialNuGet (version : string) =
         NuGetReference(fcsPackageName, version, prerelease=true)
@@ -95,29 +92,52 @@ module NuGet =
     let localNuGet (sourceDir : string) =
         let version = inferLocalNuGetVersion sourceDir
         NuGetReference(fcsPackageName, version, Uri(sourceDir), prerelease=false)
-                
-    let makeReferenceList (version : NuGetFCSVersion) : NuGetReferenceList =
+       
+    let makeReference (version : NuGetFCSVersion) =
         match version with
         | NuGetFCSVersion.Official version -> officialNuGet version
         | NuGetFCSVersion.Local source -> localNuGet source
+                
+    let makeReferenceList (version : NuGetFCSVersion) : NuGetReferenceList =
+        version
+        |> makeReference
         |> fun ref -> NuGetReferenceList([ref])
 
-let private defaultConfig () =
-    let versions = [
-        //NuGet.NuGetFCSVersion.Official "41.0.5"
-        NuGet.NuGetFCSVersion.Local @"c:\projekty\fsharp\fsharp\artifacts\packages\Debug\Release\"
-    ]
+let private defaultConfig (versions : NuGetFCSVersion list) (inputFile : string) =
     let baseJob = Job.Dry
     let jobs =
         versions
         |> List.map NuGet.makeReferenceList
         |> List.map baseJob.WithNuGet
+        |> List.map (fun j -> j.WithEnvironmentVariable("FcsBenchmarkInput", "inputsPath"))
     
     let config = List.fold (fun (config : IConfig) (job : Job) -> config.AddJob(job)) DefaultConfig.Instance jobs
     config.AddExporter(JsonExporter(indentJson = true))
 
+type Args = {
+    [<Option("input", Required = true, HelpText = "Input json")>]
+    Input : string
+    [<Option("official", Required = false, HelpText = "Official version list.")>]
+    OfficialVersions : string seq
+    [<Option("local", Required = false, HelpText = "Local nuget source list.")>]
+    LocalNuGetSourceDirs : string seq
+    [<Option("bdnargs", Required = false)>]
+    BdnArgs : string
+}
+
 [<EntryPoint>]
 let main args =
-    BenchmarkSwitcher.FromAssembly(typeof<FCSBenchmark>.Assembly).Run(args, defaultConfig())
-    |> ignore
-    0
+    use parser = new Parser(fun x -> x.IgnoreUnknownArguments <- true)
+    let result = parser.ParseArguments<Args>(args)
+    match result with
+    | :? Parsed<Args> as parsed ->
+        let official = parsed.Value.OfficialVersions |> Seq.map NuGetFCSVersion.Official
+        let local = parsed.Value.LocalNuGetSourceDirs |> Seq.map NuGetFCSVersion.Local
+        let versions =
+            Seq.append official local
+            |> Seq.toList
+        let defaultConfig = defaultConfig versions parsed.Value.Input
+        let args = Microsoft.CodeAnalysis.CommandLineParser.SplitCommandLineIntoArguments(parsed.Value.BdnArgs, false) |> Seq.toArray
+        let summary = BenchmarkRunner.Run(typeof<FCSBenchmark>, defaultConfig, args)
+        0
+    | _ -> failwith "Parse error"

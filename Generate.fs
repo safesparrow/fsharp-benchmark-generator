@@ -7,7 +7,6 @@ open System.Reflection
 open System.Runtime.CompilerServices
 open Benchmarks.Common.Dtos
 open CommandLine
-open CommandLine.Text
 open FSharp.Compiler.CodeAnalysis
 open Ionide.ProjInfo
 open Ionide.ProjInfo.Types
@@ -191,7 +190,7 @@ module Generate =
         // TODO allow customization of build properties
         let props = []
         let loader = WorkspaceLoader.Create(toolsPath, props)
-        let vs = Microsoft.Build.Locator.MSBuildLocator.RegisterDefaults()
+        let _ = Microsoft.Build.Locator.MSBuildLocator.RegisterDefaults()
         
         let projects, _ =
             fun () -> loader.LoadSln(sln, [], BinaryLogGeneration.Off) |> Seq.toList
@@ -308,6 +307,11 @@ module Generate =
         let jObject = JsonConvert.DeserializeObject<JObject>(json)
         extractResultsFromJson jObject
     
+    let private makeVersionArg (version : NuGetFCSVersion) =
+        match version with
+        | NuGetFCSVersion.Official version -> $"--official={version}"
+        | NuGetFCSVersion.Local sourceDir -> $"--local=\"{sourceDir}\""
+    
     let private prepareAndRun (config : Config) (case : BenchmarkCase) (dryRun : bool) (cleanup : bool) (bdnArgs : string option) =
         let codebase = prepareCodebase config case
         let inputs = generateInputs case codebase.Path
@@ -333,9 +337,26 @@ module Generate =
                 @ emptyProjInfoEnvironmentVariables()
             let bdnArtifactsDir = Path.Combine(workingDir, "BenchmarkDotNet.Artifacts")
             let benchmarkClass = "Benchmarks.Runner.FCSBenchmark"
-            let iterationCountString = match config.Iterations with Some iterations -> $"--iterationCount={iterations}" | None -> ""
             let exe = "dotnet"
-            let args = $"run -c Release -- --filter {benchmarkClass}.Run --envVars=FcsBenchmarkInput:{inputsPath} {iterationCountString} {bdnArgs |> Option.defaultValue String.Empty}".Trim()
+            let versions =
+                [
+                    NuGetFCSVersion.Official "41.0.5"
+                ]
+            let versionsArgs =
+                versions
+                |> List.map makeVersionArg
+                |> fun args -> String.Join(",", args)
+            let bdnArgs =
+                seq {
+                    match bdnArgs with Some bdnArgs -> yield bdnArgs | None -> ()
+                    match config.Iterations with Some iterations -> yield $"--iterationCount={iterations}" | None -> ()
+                }
+                |> Seq.toList
+                |> fun args ->
+                    match args with
+                    | [] -> ""
+                    | args -> "--bdnArgs=\"" + String.Concat(" ", args) + "\""
+            let args = $"run -c Release -- --input={inputsPath} {versionsArgs} {bdnArgs}".Trim()
             log.Information("Starting the benchmark. Full BDN output can be found in {artifactFiles}. Full commandline: '{exe} {args}' in '{dir}'.", $"{bdnArtifactsDir}/*.log", exe, args, workingDir)
             Utils.runProcess exe args workingDir envVariables LogEventLevel.Verbose
             
