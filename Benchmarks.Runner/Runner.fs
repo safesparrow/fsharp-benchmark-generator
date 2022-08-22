@@ -70,17 +70,51 @@ type FCSBenchmark () =
         setup
         |> Option.iter (fun (checker, _) -> cleanCaches checker)
 
+let fcsPackageName = "FSharp.Compiler.Service"
+
+module NuGet =
+    [<RequireQualifiedAccess>]
+    type NuGetFCSVersion =
+        | Official of version : string
+        | Local of sourceDir : string
+
+    let officialNuGet (version : string) =
+        NuGetReference(fcsPackageName, version, prerelease=true)
+
+    let extractFCSNuPkgVersion (file : string) : string option =
+        match System.Text.RegularExpressions.Regex.Match(file.ToLowerInvariant(), $".*{fcsPackageName.ToLowerInvariant()}.([0-9_\-\.]+).nupkg") with
+        | res when res.Success -> res.Groups[1].Value |> Some
+        | _ -> None
+        
+    let inferLocalNuGetVersion (sourceDir : string) =
+        let files = Directory.EnumerateFiles(sourceDir, $"{fcsPackageName}.*.nupkg") |> Seq.toArray
+        files
+        |> Array.choose extractFCSNuPkgVersion
+        |> Array.exactlyOne
+
+    let localNuGet (sourceDir : string) =
+        let version = inferLocalNuGetVersion sourceDir
+        NuGetReference(fcsPackageName, version, Uri(sourceDir), prerelease=false)
+                
+    let makeReferenceList (version : NuGetFCSVersion) : NuGetReferenceList =
+        match version with
+        | NuGetFCSVersion.Official version -> officialNuGet version
+        | NuGetFCSVersion.Local source -> localNuGet source
+        |> fun ref -> NuGetReferenceList([ref])
+
 let private defaultConfig () =
-    DefaultConfig.Instance.AddJob(
-        Job.Default
-            .WithWarmupCount(0)
-            .WithIterationCount(1)
-            .WithLaunchCount(1)
-            .WithInvocationCount(1)
-            .WithUnrollFactor(1)
-            .WithStrategy(RunStrategy.ColdStart)
-            .AsDefault()
-    ).AddExporter(JsonExporter(indentJson = true))
+    let versions = [
+        //NuGet.NuGetFCSVersion.Official "41.0.5"
+        NuGet.NuGetFCSVersion.Local @"c:\projekty\fsharp\fsharp\artifacts\packages\Debug\Release\"
+    ]
+    let baseJob = Job.Dry
+    let jobs =
+        versions
+        |> List.map NuGet.makeReferenceList
+        |> List.map baseJob.WithNuGet
+    
+    let config = List.fold (fun (config : IConfig) (job : Job) -> config.AddJob(job)) DefaultConfig.Instance jobs
+    config.AddExporter(JsonExporter(indentJson = true))
 
 [<EntryPoint>]
 let main args =
