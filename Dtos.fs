@@ -223,3 +223,12 @@ let deserializeInputs (json : string) : BenchmarkInputs =
 type NuGetFCSVersion =
     | Official of version : string
     | Local of sourceDir : string
+    
+let parseVersions (officialVersions : string seq) (localNuGetSourceDirs : string seq) =
+    let official = officialVersions |> Seq.map NuGetFCSVersion.Official
+    let local = localNuGetSourceDirs |> Seq.map NuGetFCSVersion.Local
+    Seq.append official local
+    |> Seq.toList
+    |> function
+        | [] -> failwith "At least one version must be specified"
+        | versions -> versions

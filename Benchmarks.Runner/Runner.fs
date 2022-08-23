@@ -2,6 +2,7 @@
 
 open System
 open System.IO
+open System.Threading
 open BenchmarkDotNet.Configs
 open BenchmarkDotNet.Engines
 open BenchmarkDotNet.Exporters.Json
@@ -11,6 +12,14 @@ open BenchmarkDotNet.Attributes
 open BenchmarkDotNet.Running
 open Benchmarks.Common.Dtos
 open CommandLine
+open NuGet.Packaging.Core
+open NuGet.Protocol.Core.Types
+open NuGet.Repositories
+open NuGet.Client
+open NuGet.Common
+open NuGet.Protocol
+open NuGet.Versioning
+
 
 [<MemoryDiagnoser>]
 type FCSBenchmark () =
@@ -75,8 +84,21 @@ let fcsPackageName = "FSharp.Compiler.Service"
 
 module NuGet =
 
+    let findFSharpCoreVersion (fcsVersion : string) =
+        use cache = new SourceCacheContext()
+        let repo = Repository.Factory.GetCoreV3("https://api.nuget.org/v3/index.json")
+        let r = repo.GetResource<PackageMetadataResource>()
+        let x = r.GetMetadataAsync(PackageIdentity("FSharp.Compiler.Service", NuGetVersion(fcsVersion)), cache, NullLogger.Instance, CancellationToken.None).Result
+        let y = x.DependencySets |> Seq.head
+        let core = y.Packages |> Seq.find (fun d -> d.Id = "FSharp.Core")
+        core.VersionRange.MinVersion
+
     let officialNuGet (version : string) =
-        NuGetReference(fcsPackageName, version, prerelease=true)
+        let core = findFSharpCoreVersion version
+        [
+            NuGetReference(fcsPackageName, version, prerelease=false)
+            NuGetReference("FSharp.Core", core.OriginalVersion, prerelease=false)
+        ]
 
     let extractFCSNuPkgVersion (file : string) : string option =
         match System.Text.RegularExpressions.Regex.Match(file.ToLowerInvariant(), $".*{fcsPackageName.ToLowerInvariant()}.([0-9_\-\.]+).nupkg") with
@@ -91,7 +113,7 @@ module NuGet =
 
     let localNuGet (sourceDir : string) =
         let version = inferLocalNuGetVersion sourceDir
-        NuGetReference(fcsPackageName, version, Uri(sourceDir), prerelease=false)
+        [NuGetReference(fcsPackageName, version, Uri(sourceDir), prerelease=false)]
        
     let makeReference (version : NuGetFCSVersion) =
         match version with
@@ -101,7 +123,7 @@ module NuGet =
     let makeReferenceList (version : NuGetFCSVersion) : NuGetReferenceList =
         version
         |> makeReference
-        |> fun ref -> NuGetReferenceList([ref])
+        |> NuGetReferenceList
 
 let private defaultConfig (versions : NuGetFCSVersion list) (inputFile : string) =
     let baseJob = Job.Dry
@@ -109,8 +131,9 @@ let private defaultConfig (versions : NuGetFCSVersion list) (inputFile : string)
         versions
         |> List.map NuGet.makeReferenceList
         |> List.map baseJob.WithNuGet
-        |> List.map (fun j -> j.WithEnvironmentVariable("FcsBenchmarkInput", "inputsPath"))
+        |> List.map (fun j -> j.WithEnvironmentVariable("FcsBenchmarkInput", inputFile))
     
+    Console.WriteLine("inputFile: " + inputFile)
     let config = List.fold (fun (config : IConfig) (job : Job) -> config.AddJob(job)) DefaultConfig.Instance jobs
     config.AddExporter(JsonExporter(indentJson = true))
 
@@ -127,17 +150,15 @@ type Args = {
 
 [<EntryPoint>]
 let main args =
-    use parser = new Parser(fun x -> x.IgnoreUnknownArguments <- true)
+    use parser = new Parser(fun x -> x.IgnoreUnknownArguments <- false)
     let result = parser.ParseArguments<Args>(args)
     match result with
     | :? Parsed<Args> as parsed ->
-        let official = parsed.Value.OfficialVersions |> Seq.map NuGetFCSVersion.Official
-        let local = parsed.Value.LocalNuGetSourceDirs |> Seq.map NuGetFCSVersion.Local
-        let versions =
-            Seq.append official local
-            |> Seq.toList
+        let versions = parseVersions parsed.Value.OfficialVersions parsed.Value.LocalNuGetSourceDirs
         let defaultConfig = defaultConfig versions parsed.Value.Input
-        let args = Microsoft.CodeAnalysis.CommandLineParser.SplitCommandLineIntoArguments(parsed.Value.BdnArgs, false) |> Seq.toArray
+        let args =
+            Microsoft.CodeAnalysis.CommandLineParser.SplitCommandLineIntoArguments(parsed.Value.BdnArgs, false)
+            |> Seq.toArray
         let summary = BenchmarkRunner.Run(typeof<FCSBenchmark>, defaultConfig, args)
         0
     | _ -> failwith "Parse error"

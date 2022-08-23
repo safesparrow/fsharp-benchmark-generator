@@ -312,7 +312,7 @@ module Generate =
         | NuGetFCSVersion.Official version -> $"--official={version}"
         | NuGetFCSVersion.Local sourceDir -> $"--local=\"{sourceDir}\""
     
-    let private prepareAndRun (config : Config) (case : BenchmarkCase) (dryRun : bool) (cleanup : bool) (bdnArgs : string option) =
+    let private prepareAndRun (config : Config) (case : BenchmarkCase) (dryRun : bool) (cleanup : bool) (bdnArgs : string option) (versions : NuGetFCSVersion list) =
         let codebase = prepareCodebase config case
         let inputs = generateInputs case codebase.Path
         let inputsPath = makeInputsPath codebase.Path
@@ -338,14 +338,20 @@ module Generate =
             let bdnArtifactsDir = Path.Combine(workingDir, "BenchmarkDotNet.Artifacts")
             let benchmarkClass = "Benchmarks.Runner.FCSBenchmark"
             let exe = "dotnet"
-            let versions =
-                [
-                    NuGetFCSVersion.Official "41.0.5"
-                ]
             let versionsArgs =
-                versions
-                |> List.map makeVersionArg
-                |> fun args -> String.Join(",", args)
+                let o =
+                    versions
+                    |> List.choose (function NuGetFCSVersion.Official v -> Some v | _ -> None)
+                    |> function
+                    | [] -> ""
+                    | officials -> "--official " + String.Join(" ", officials)
+                let l =
+                    versions
+                    |> List.choose (function NuGetFCSVersion.Local v -> Some v | _ -> None)
+                    |> function
+                    | [] -> ""
+                    | locals -> "--local " + String.Join(" ", locals)
+                o + " " + l
             let bdnArgs =
                 seq {
                     match bdnArgs with Some bdnArgs -> yield bdnArgs | None -> ()
@@ -355,7 +361,7 @@ module Generate =
                 |> fun args ->
                     match args with
                     | [] -> ""
-                    | args -> "--bdnArgs=\"" + String.Concat(" ", args) + "\""
+                    | args -> "--bdnargs \"" + String.Join(" ", args) + "\""
             let args = $"run -c Release -- --input={inputsPath} {versionsArgs} {bdnArgs}".Trim()
             log.Information("Starting the benchmark. Full BDN output can be found in {artifactFiles}. Full commandline: '{exe} {args}' in '{dir}'.", $"{bdnArtifactsDir}/*.log", exe, args, workingDir)
             Utils.runProcess exe args workingDir envVariables LogEventLevel.Verbose
@@ -391,6 +397,10 @@ module Generate =
             Verbose : bool
             [<CommandLine.Option('b', "bdnargs", HelpText = "Additional BDN arguments as a single string")>]
             BdnArgs : string option
+            [<Option("official", Required = false, HelpText = "A list of publically available FCS NuGet versions to test.")>]
+            OfficialVersions : string seq
+            [<Option("local", Required = false, HelpText = "A list of local NuGet sources to use for testing locally-generated FCS nupkg files.")>]
+            LocalNuGetSourceDirs : string seq
         }
     
     let run (args : Args) =
@@ -436,7 +446,8 @@ module Generate =
                     reraise()
             
             use _ = LogContext.PushProperty("step", "PrepareAndRun")
-            prepareAndRun config case args.DryRun args.Cleanup args.BdnArgs
+            let versions = parseVersions args.OfficialVersions args.LocalNuGetSourceDirs
+            prepareAndRun config case args.DryRun args.Cleanup args.BdnArgs versions
         with ex ->
             if args.Verbose then
                 log.Fatal(ex, "Failure.")
