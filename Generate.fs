@@ -361,7 +361,7 @@ module Generate =
                 |> fun args ->
                     match args with
                     | [] -> ""
-                    | args -> "--bdnargs \"" + String.Join(" ", args) + "\""
+                    | args -> "--bdnargs=\"" + String.Join(" ", args) + "\""
             let args = $"run -c Release -- --input={inputsPath} {versionsArgs} {bdnArgs}".Trim()
             log.Information("Starting the benchmark. Full BDN output can be found in {artifactFiles}. Full commandline: '{exe} {args}' in '{dir}'.", $"{bdnArtifactsDir}/*.log", exe, args, workingDir)
             Utils.runProcess exe args workingDir envVariables LogEventLevel.Verbose
