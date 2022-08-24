@@ -1,19 +1,33 @@
 ﻿module Benchmarks.Runner
 
 open System
+open System.Collections.Generic
 open System.IO
+open System.Threading
+open BenchmarkDotNet.Analysers
 open BenchmarkDotNet.Configs
 open BenchmarkDotNet.Engines
+open BenchmarkDotNet.Exporters
 open BenchmarkDotNet.Exporters.Json
 open BenchmarkDotNet.Jobs
+open BenchmarkDotNet.Loggers
 open FSharp.Compiler.CodeAnalysis
 open BenchmarkDotNet.Attributes
 open BenchmarkDotNet.Running
 open Benchmarks.Common.Dtos
+open CommandLine
+open NuGet.Packaging.Core
+open NuGet.Protocol.Core.Types
+open NuGet.Repositories
+open NuGet.Client
+open NuGet.Common
+open NuGet.Protocol
+open NuGet.Versioning
+
 
 [<MemoryDiagnoser>]
-type FCSBenchmark () =
-        
+type FCSBenchmark () =    
+    
     let printDiagnostics (results : FSharpCheckFileResults) =
         match results.Diagnostics with
         | [||] -> ()
@@ -44,9 +58,11 @@ type FCSBenchmark () =
             
     let mutable setup : (FSharpChecker * BenchmarkAction list) option = None
         
+    static member InputEnvironmentVariable = "FcsBenchmarkInput"
+        
     [<GlobalSetup>]
     member _.Setup() =
-        let inputFile = Environment.GetEnvironmentVariable("FcsBenchmarkInput")
+        let inputFile = Environment.GetEnvironmentVariable(FCSBenchmark.InputEnvironmentVariable)
         if File.Exists(inputFile) then
             printfn $"Deserializing inputs from '{inputFile}'"
             let json = File.ReadAllText(inputFile)
@@ -70,20 +86,126 @@ type FCSBenchmark () =
         setup
         |> Option.iter (fun (checker, _) -> cleanCaches checker)
 
-let private defaultConfig () =
-    DefaultConfig.Instance.AddJob(
-        Job.Default
-            .WithWarmupCount(0)
-            .WithIterationCount(1)
-            .WithLaunchCount(1)
-            .WithInvocationCount(1)
-            .WithUnrollFactor(1)
-            .WithStrategy(RunStrategy.ColdStart)
-            .AsDefault()
-    ).AddExporter(JsonExporter(indentJson = true))
+module NuGet =
+
+    let private fcsPackageName = "FSharp.Compiler.Service"
+    let private fsharpCorePackageName = "FSharp.Core"
+
+    let findFSharpCoreVersion (fcsVersion : string) =
+        use cache = new SourceCacheContext()
+        let repo = Repository.Factory.GetCoreV3("https://api.nuget.org/v3/index.json")
+        let r = repo.GetResource<PackageMetadataResource>()
+        let x = r.GetMetadataAsync(PackageIdentity("FSharp.Compiler.Service", NuGetVersion(fcsVersion)), cache, NullLogger.Instance, CancellationToken.None).Result
+        let y = x.DependencySets |> Seq.head
+        let core = y.Packages |> Seq.find (fun d -> d.Id = "FSharp.Core")
+        core.VersionRange.MinVersion
+
+    let officialNuGet (version : string) =
+        let core = findFSharpCoreVersion version
+        [
+            NuGetReference(fcsPackageName, version, prerelease=false)
+            NuGetReference("FSharp.Core", core.OriginalVersion, prerelease=false)
+        ]
+
+    let extractNuPkgVersion (packageName : string) (file : string) : string option =
+        match System.Text.RegularExpressions.Regex.Match(file.ToLowerInvariant(), $".*{packageName.ToLowerInvariant()}.([0-9_\-\.]+).nupkg") with
+        | res when res.Success -> res.Groups[1].Value |> Some
+        | _ -> None
+        
+    let inferLocalNuGetVersion (sourceDir : string) (packageName : string) =
+        let files = Directory.EnumerateFiles(sourceDir, $"{packageName}.*.nupkg") |> Seq.toArray
+        let x = files|> Array.choose (extractNuPkgVersion packageName)
+        x |> Array.exactlyOne
+
+    let localNuGet (sourceDir : string) =
+        let candidateDirs = [sourceDir; Path.Combine(sourceDir, "artifacts", "packages", "Release", "Release")]
+        candidateDirs
+        |> List.choose (fun sourceDir ->
+            try
+                [
+                    fcsPackageName, inferLocalNuGetVersion sourceDir fcsPackageName
+                    fsharpCorePackageName, inferLocalNuGetVersion sourceDir fsharpCorePackageName
+                ]
+                |> List.map (fun (name, version) -> NuGetReference(name, version, Uri(sourceDir), prerelease=false))
+                |> Some
+            with _ -> None
+        )
+        |> function
+            | [] ->
+                let candidateDirsString =
+                    String.Join(Environment.NewLine, candidateDirs |> List.map (fun dir -> $" - {dir}"))
+                failwith $"Could not find nupkg files with sourceDir='{sourceDir}.'\n\
+                               Attempted the following candidate directories:\n\
+                               {candidateDirsString}"
+            | head :: _ -> head
+       
+    let makeReference (version : NuGetFCSVersion) =
+        match version with
+        | NuGetFCSVersion.Official version -> officialNuGet version
+        | NuGetFCSVersion.Local source -> localNuGet source
+                
+    let makeReferenceList (version : NuGetFCSVersion) : NuGetReferenceList =
+        version
+        |> makeReference
+        |> NuGetReferenceList
+
+type RunnerArgs =
+    {
+        [<Option("input", Required = true, HelpText = "Input json")>]
+        Input : string
+        [<Option("official", Required = false, HelpText = "List of official NuGet versions of FCS to test")>]
+        OfficialVersions : string seq
+        [<Option("local", Required = false, HelpText = "List of local NuGet source directories to use as sources of FCS dll to test")>]
+        LocalNuGetSourceDirs : string seq
+        [<Option("iterations", Required = false, Default = 1, HelpText = "Number of iterations - BDN's '--iteration-count'")>]
+        Iterations : int
+        [<Option("warmups", Required = false, Default = 1, HelpText = "Number of warmups")>]
+        Warmups : int
+    }
+
+let private makeConfig (versions : NuGetFCSVersion list) (args : RunnerArgs) : IConfig =
+    let baseJob =
+        Job.ShortRun
+            .WithWarmupCount(args.Warmups)
+            .WithIterationCount(args.Iterations)
+    let jobs =
+        versions
+        |> List.mapi (
+            fun i v ->
+                let job =
+                    baseJob
+                        .WithNuGet(NuGet.makeReferenceList v)
+                        .WithEnvironmentVariable(FCSBenchmark.InputEnvironmentVariable, args.Input)
+                        .WithId(match v with NuGetFCSVersion.Official v -> v | NuGetFCSVersion.Local source -> source)
+                job
+        )
+    
+    let d = DefaultConfig.Instance
+    let config = ManualConfig.CreateEmpty()
+    let config = config.AddLogger(BenchmarkDotNet.Loggers.NullLogger.Instance)
+    let config = config.AddExporter(d.GetExporters() |> Seq.toArray)
+    let config = config.AddAnalyser(d.GetAnalysers() |> Seq.toArray)
+    let config = config.AddColumnProvider(d.GetColumnProviders() |> Seq.toArray)
+    let config = config.AddDiagnoser(d.GetDiagnosers() |> Seq.toArray)
+    let config = config.AddValidator(d.GetValidators() |> Seq.toArray)
+    let config = config.AddExporter(JsonExporter(indentJson = true))
+    let config = List.fold (fun (config : IConfig) (job : Job) -> config.AddJob(job)) config jobs
+    config
 
 [<EntryPoint>]
 let main args =
-    BenchmarkSwitcher.FromAssembly(typeof<FCSBenchmark>.Assembly).Run(args, defaultConfig())
-    |> ignore
-    0
+    use parser = new Parser(fun x -> x.IgnoreUnknownArguments <- false)
+    let result = parser.ParseArguments<RunnerArgs>(args)
+    match result with
+    | :? Parsed<RunnerArgs> as parsed ->
+        let versions = parseVersions parsed.Value.OfficialVersions parsed.Value.LocalNuGetSourceDirs
+        let defaultConfig = makeConfig versions parsed.Value
+        let summary = BenchmarkRunner.Run(typeof<FCSBenchmark>, defaultConfig)
+        let analyser = summary.BenchmarksCases[0].Config.GetCompositeAnalyser()
+        let conclusions = List<Conclusion>(analyser.Analyse(summary))
+        MarkdownExporter.Console.ExportToLog(summary, ConsoleLogger.Default)
+        ConclusionHelper.Print(ConsoleLogger.Ascii, conclusions)
+        printfn $"Full Log available in '{summary.LogFilePath}'"
+        printfn $"Reports available in '{summary.ResultsDirectoryPath}'"
+        0
+    | _ -> failwith "Parse error"

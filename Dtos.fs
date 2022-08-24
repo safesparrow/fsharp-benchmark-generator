@@ -218,3 +218,17 @@ let serializeInputs (inputs : BenchmarkInputs) : string =
 let deserializeInputs (json : string) : BenchmarkInputs =
     let dto = JsonConvert.DeserializeObject<BenchmarkInputsDto>(json, jsonSerializerSettings)
     inputsFromDto dto
+    
+[<RequireQualifiedAccess>]
+type NuGetFCSVersion =
+    | Official of version : string
+    | Local of sourceDir : string
+    
+let parseVersions (officialVersions : string seq) (localNuGetSourceDirs : string seq) =
+    let official = officialVersions |> Seq.map NuGetFCSVersion.Official
+    let local = localNuGetSourceDirs |> Seq.map NuGetFCSVersion.Local
+    Seq.append official local
+    |> Seq.toList
+    |> function
+        | [] -> failwith "At least one version must be specified"
+        | versions -> versions

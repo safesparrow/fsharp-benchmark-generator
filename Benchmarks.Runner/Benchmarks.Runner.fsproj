@@ -1,18 +1,12 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>net6.0</TargetFramework>
+        <TargetFramework>net472</TargetFramework>
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
         <OutputType>exe</OutputType>
         <RootNamespace>BenchmarkRunner</RootNamespace>
         <Configurations>Release</Configurations>
-    </PropertyGroup>
-
-    <PropertyGroup>
-        <!-- By default reference FCS via NuGet -->
-        <FcsReferenceType Condition="'$(FcsReferenceType)' == ''">nuget</FcsReferenceType>
-        <!-- By default use the latest official release of FCS -->
-        <FcsNugetVersion Condition="'$(FcsNugetVersion)' == ''">41.0.5</FcsNugetVersion>
+        <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
     </PropertyGroup>
 
     <ItemGroup>
@@ -22,22 +16,16 @@
         <Compile Include="Runner.fs" />
     </ItemGroup>
 
-    <!-- Reference FCS in one of two different ways -->
-
-    <!-- Reference the FCS NuGet package with the specified $FcsVersion -->
-    <ItemGroup Condition=" '$(FcsReferenceType)' == 'nuget' ">
-        <PackageReference Include="FSharp.Compiler.Service" Version="41.0.5" />
-    </ItemGroup>
-    <!-- Reference the dll specified in $FcsDllPath -->
-    <ItemGroup Condition=" '$(FcsReferenceType)' == 'dll' ">
-        <Reference Include="FSharp.Compiler.Service">
-            <HintPath>$(FcsDllPath)</HintPath>
-        </Reference>
+    <ItemGroup>
+        <PackageReference Include="FSharp.Compiler.Service" Version="40.0.0" />
+        <PackageReference Include="FSharp.Core" Version="5.0.2" />
     </ItemGroup>
 
     <ItemGroup>
       <PackageReference Include="BenchmarkDotNet" Version="0.13.1" />
       <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
+      <PackageReference Include="NuGet.Client" Version="4.2.0" />
+      <PackageReference Include="NuGet.Protocol" Version="6.3.0" />
     </ItemGroup>
 
 </Project>

@@ -7,7 +7,6 @@ open System.Reflection
 open System.Runtime.CompilerServices
 open Benchmarks.Common.Dtos
 open CommandLine
-open CommandLine.Text
 open FSharp.Compiler.CodeAnalysis
 open Ionide.ProjInfo
 open Ionide.ProjInfo.Types
@@ -41,10 +40,7 @@ module Utils =
         let p = new Process(StartInfo = info)
         p.EnableRaisingEvents <- true
         p.OutputDataReceived.Add(fun args -> log.Write(outputLogLevel, args.Data))
-        p.ErrorDataReceived.Add(fun args ->
-            log.Information(args.Data)
-            log.Error(args.Data)
-        )
+        p.ErrorDataReceived.Add(fun args -> log.Error(args.Data))
         p.Start() |> ignore
         p.BeginErrorReadLine()
         p.BeginOutputReadLine()
@@ -145,8 +141,6 @@ module Generate =
     type Config =
         {
             CheckoutBaseDir : string
-            FcsDllPath : string option // defaults to a NuGet package
-            Iterations : int option
         }
     
     type Codebase =
@@ -191,7 +185,7 @@ module Generate =
         // TODO allow customization of build properties
         let props = []
         let loader = WorkspaceLoader.Create(toolsPath, props)
-        let vs = Microsoft.Build.Locator.MSBuildLocator.RegisterDefaults()
+        let _ = Microsoft.Build.Locator.MSBuildLocator.RegisterDefaults()
         
         let projects, _ =
             fun () -> loader.LoadSln(sln, [], BinaryLogGeneration.Off) |> Seq.toList
@@ -262,18 +256,6 @@ module Generate =
         projInfoEnvVariables
         |> List.map (fun var -> var, "")
         
-    module MSBuildProps =
-        let makeDefault () =
-            [
-                "FcsReferenceType", "nuget"
-                "FcsNugetVersion", "41.0.5"
-            ]
-        let makeDll (fcsDllPath : string) =
-            [
-                "FcsReferenceType", "dll"
-                "FcsDllPath", fcsDllPath 
-            ]
-    
     let private resultsJsonPath (bdnArtifactDir : string) (benchmarkName : string) =
         Path.Combine(bdnArtifactDir, $@"results/{benchmarkName}-report.json")
     
@@ -308,7 +290,12 @@ module Generate =
         let jObject = JsonConvert.DeserializeObject<JObject>(json)
         extractResultsFromJson jObject
     
-    let private prepareAndRun (config : Config) (case : BenchmarkCase) (dryRun : bool) (cleanup : bool) (bdnArgs : string option) =
+    let private makeVersionArg (version : NuGetFCSVersion) =
+        match version with
+        | NuGetFCSVersion.Official version -> $"--official={version}"
+        | NuGetFCSVersion.Local sourceDir -> $"--local=\"{sourceDir}\""
+    
+    let private prepareAndRun (config : Config) (case : BenchmarkCase) (dryRun : bool) (cleanup : bool) (iterations : int) (warmups : int) (versions : NuGetFCSVersion list) =
         let codebase = prepareCodebase config case
         let inputs = generateInputs case codebase.Path
         let inputsPath = makeInputsPath codebase.Path
@@ -320,28 +307,31 @@ module Generate =
         if dryRun = false then
             use _ = LogContext.PushProperty("step", "Run")
             let workingDir = Path.Combine(Path.GetDirectoryName(Assembly.GetAssembly(typeof<RepoSetup.RepoSpec>).Location), "Benchmarks.Runner")
-            let additionalEnvVariables =
-                match config.FcsDllPath with
-                | None -> MSBuildProps.makeDefault()
-                | Some fcsDllPath ->
-                    let absolutePath = Path.Combine(workingDir, fcsDllPath)
-                    if File.Exists absolutePath |> not then
-                        failwith $"Given FCS dll path doesn't exist: {absolutePath}"
-                    MSBuildProps.makeDll fcsDllPath
-            let envVariables =
-                additionalEnvVariables
-                @ emptyProjInfoEnvironmentVariables()
+            let envVariables = emptyProjInfoEnvironmentVariables()
             let bdnArtifactsDir = Path.Combine(workingDir, "BenchmarkDotNet.Artifacts")
             let benchmarkClass = "Benchmarks.Runner.FCSBenchmark"
-            let iterationCountString = match config.Iterations with Some iterations -> $"--iterationCount={iterations}" | None -> ""
             let exe = "dotnet"
-            let args = $"run -c Release -- --filter {benchmarkClass}.Run --envVars=FcsBenchmarkInput:{inputsPath} {iterationCountString} {bdnArgs |> Option.defaultValue String.Empty}".Trim()
-            log.Information("Starting the benchmark. Full BDN output can be found in {artifactFiles}. Full commandline: '{exe} {args}' in '{dir}'.", $"{bdnArtifactsDir}/*.log", exe, args, workingDir)
-            Utils.runProcess exe args workingDir envVariables LogEventLevel.Verbose
-            
-            let res = readJsonResultsSummary bdnArtifactsDir benchmarkClass
-            log.Information("Detailed results can be found in {resultsDir}.", Path.Combine(bdnArtifactsDir, "results"))
-            log.Information("Result summary: Mean={mean:0.#}s, Allocated={allocatedMB:0}MB.", res.MeanS, res.AllocatedMB)
+            let versionsArgs =
+                let o =
+                    versions
+                    |> List.choose (function NuGetFCSVersion.Official v -> Some v | _ -> None)
+                    |> function
+                    | [] -> ""
+                    | officials -> "--official " + String.Join(" ", officials)
+                let l =
+                    versions
+                    |> List.choose (function NuGetFCSVersion.Local v -> Some v | _ -> None)
+                    |> function
+                    | [] -> ""
+                    | locals -> "--local " + String.Join(" ", locals)
+                o + " " + l
+            let args = $"run -c Release -- --input={inputsPath} --iterations={iterations} --warmups={warmups} {versionsArgs}".Trim()
+            log.Information(
+                "Starting the benchmark:\n\
+                 - Full BDN output can be found in {artifactFiles}.\n\
+                 - Full commandline: '{exe} {args}'\n\
+                 - Working directory: '{dir}'.", $"{bdnArtifactsDir}/*.log", exe, args, workingDir)
+            Utils.runProcess exe args workingDir envVariables LogEventLevel.Information
         else
             log.Information("Not running the benchmark as requested")
             
@@ -362,14 +352,16 @@ module Generate =
             DryRun : bool
             [<CommandLine.Option(Default = false, HelpText = "If set, removes the checkout directory afterwards. Doesn't apply to local codebases")>]
             Cleanup : bool
-            [<CommandLine.Option('f', "fcsdll", HelpText = "Path to the FSharp.Compiler.Service.dll to benchmark - by default a NuGet package is used instead")>]
-            FcsDllPath : string option
-            [<CommandLine.Option('n', "iterations", HelpText = "Number of iterations to run")>]
-            Iterations : int option
+            [<CommandLine.Option('n', "iterations", Default = 1, HelpText = "Number of iterations to run")>]
+            Iterations : int
+            [<CommandLine.Option('w', "warmups", Default = 1, HelpText = "Number of warmups to run")>]
+            Warmups : int
             [<CommandLine.Option('v', "verbose", Default = false, HelpText = "Verbose logging. Includes output of all preparation steps.")>]
             Verbose : bool
-            [<CommandLine.Option('b', "bdnargs", HelpText = "Additional BDN arguments as a single string")>]
-            BdnArgs : string option
+            [<Option("official", Required = false, HelpText = "A list of publically available FCS NuGet versions to test.")>]
+            OfficialVersions : string seq
+            [<Option("local", Required = false, HelpText = "A list of local NuGet sources to use for testing locally-generated FCS nupkg files.")>]
+            LocalNuGetSourceDirs : string seq
         }
     
     let run (args : Args) =
@@ -384,8 +376,6 @@ module Generate =
             let config =
                 {
                     Config.CheckoutBaseDir = args.CheckoutsDir
-                    Config.FcsDllPath = args.FcsDllPath
-                    Config.Iterations = args.Iterations
                 }
             let case =
                 use _ = LogContext.PushProperty("step", "Read input")
@@ -415,7 +405,8 @@ module Generate =
                     reraise()
             
             use _ = LogContext.PushProperty("step", "PrepareAndRun")
-            prepareAndRun config case args.DryRun args.Cleanup args.BdnArgs
+            let versions = parseVersions args.OfficialVersions args.LocalNuGetSourceDirs
+            prepareAndRun config case args.DryRun args.Cleanup args.Iterations args.Warmups versions
         with ex ->
             if args.Verbose then
                 log.Fatal(ex, "Failure.")
