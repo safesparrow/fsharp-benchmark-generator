@@ -1,11 +1,11 @@
-﻿module Benchmarks.Generator.Generate
+﻿namespace FCSBenchmark.Generator
 
 open System
 open System.Diagnostics
 open System.IO
 open System.Reflection
 open System.Runtime.CompilerServices
-open Benchmarks.Common.Dtos
+open FCSBenchmark.Common.Dtos
 open CommandLine
 open FSharp.Compiler.CodeAnalysis
 open Ionide.ProjInfo
@@ -16,7 +16,9 @@ open Serilog
 open Serilog.Context
 open Serilog.Events
 
-let mutable private log : ILogger = null
+[<AutoOpen>]
+module X =
+    let mutable internal log : ILogger = null
 
 /// General utilities
 [<RequireQualifiedAccess>]
@@ -306,10 +308,10 @@ module Generate =
         
         if dryRun = false then
             use _ = LogContext.PushProperty("step", "Run")
-            let workingDir = Path.Combine(Path.GetDirectoryName(Assembly.GetAssembly(typeof<RepoSetup.RepoSpec>).Location), "Benchmarks.Runner")
+            let workingDir = Path.Combine(Path.GetDirectoryName(Assembly.GetAssembly(typeof<RepoSetup.RepoSpec>).Location), "FCSBenchmark.Runner")
             let envVariables = emptyProjInfoEnvironmentVariables()
             let bdnArtifactsDir = Path.Combine(workingDir, "BenchmarkDotNet.Artifacts")
-            let benchmarkClass = "Benchmarks.Runner.FCSBenchmark"
+            let benchmarkClass = "FCSBenchmark.Runner.FCSBenchmark"
             let exe = "dotnet"
             let versionsArgs =
                 let o =

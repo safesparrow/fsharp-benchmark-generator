@@ -1,8 +1,8 @@
-﻿/// This file is shared between Benchmarks.Generator that serializes inputs using these DTO types,
-/// and Benchmarks.Runner that deserializes them using these DTO types.
+﻿/// This file is shared between FCSBenchmark.Generator that serializes inputs using these DTO types,
+/// and FCSBenchmark.Runner that deserializes them using these DTO types.
 /// It's shared via link rather than a library.
 /// There is no easy way for the two projects to reference a shared F# library because they have different FSharp.Core references
-module Benchmarks.Common.Dtos
+module FCSBenchmark.Common.Dtos
 #nowarn "40"
 
 open System

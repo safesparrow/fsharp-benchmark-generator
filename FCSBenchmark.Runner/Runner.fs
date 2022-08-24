@@ -1,4 +1,4 @@
-﻿module Benchmarks.Runner
+﻿module FCSBenchmark.Runner
 
 open System
 open System.Collections.Generic
@@ -6,7 +6,6 @@ open System.IO
 open System.Threading
 open BenchmarkDotNet.Analysers
 open BenchmarkDotNet.Configs
-open BenchmarkDotNet.Engines
 open BenchmarkDotNet.Exporters
 open BenchmarkDotNet.Exporters.Json
 open BenchmarkDotNet.Jobs
@@ -14,19 +13,17 @@ open BenchmarkDotNet.Loggers
 open FSharp.Compiler.CodeAnalysis
 open BenchmarkDotNet.Attributes
 open BenchmarkDotNet.Running
-open Benchmarks.Common.Dtos
+open FCSBenchmark.Common.Dtos
 open CommandLine
 open NuGet.Packaging.Core
 open NuGet.Protocol.Core.Types
-open NuGet.Repositories
-open NuGet.Client
 open NuGet.Common
 open NuGet.Protocol
 open NuGet.Versioning
 
 
 [<MemoryDiagnoser>]
-type FCSBenchmark () =    
+type Benchmark () =    
     
     let printDiagnostics (results : FSharpCheckFileResults) =
         match results.Diagnostics with
@@ -62,7 +59,7 @@ type FCSBenchmark () =
         
     [<GlobalSetup>]
     member _.Setup() =
-        let inputFile = Environment.GetEnvironmentVariable(FCSBenchmark.InputEnvironmentVariable)
+        let inputFile = Environment.GetEnvironmentVariable(Benchmark.InputEnvironmentVariable)
         if File.Exists(inputFile) then
             printfn $"Deserializing inputs from '{inputFile}'"
             let json = File.ReadAllText(inputFile)
@@ -175,7 +172,7 @@ let private makeConfig (versions : NuGetFCSVersion list) (args : RunnerArgs) : I
                 let job =
                     baseJob
                         .WithNuGet(NuGet.makeReferenceList v)
-                        .WithEnvironmentVariable(FCSBenchmark.InputEnvironmentVariable, args.Input)
+                        .WithEnvironmentVariable(Benchmark.InputEnvironmentVariable, args.Input)
                         .WithId(match v with NuGetFCSVersion.Official v -> v | NuGetFCSVersion.Local source -> source)
                 job
         )
@@ -200,7 +197,7 @@ let main args =
     | :? Parsed<RunnerArgs> as parsed ->
         let versions = parseVersions parsed.Value.OfficialVersions parsed.Value.LocalNuGetSourceDirs
         let defaultConfig = makeConfig versions parsed.Value
-        let summary = BenchmarkRunner.Run(typeof<FCSBenchmark>, defaultConfig)
+        let summary = BenchmarkRunner.Run(typeof<Benchmark>, defaultConfig)
         let analyser = summary.BenchmarksCases[0].Config.GetCompositeAnalyser()
         let conclusions = List<Conclusion>(analyser.Analyse(summary))
         MarkdownExporter.Console.ExportToLog(summary, ConsoleLogger.Default)

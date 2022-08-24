@@ -1,8 +1,8 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Benchmarks.Generator", "Benchmarks.Generator.fsproj", "{39D9CB01-D59C-44FA-A540-80707C51B6AC}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "FCSBenchmark.Generator", "FCSBenchmark.Generator.fsproj", "{39D9CB01-D59C-44FA-A540-80707C51B6AC}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Benchmarks.Runner", "Benchmarks.Runner\Benchmarks.Runner.fsproj", "{953A6E24-6770-4BBB-824D-8579A3C7B017}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "FCSBenchmark.Runner", "FCSBenchmark.Runner\FCSBenchmark.Runner.fsproj", "{953A6E24-6770-4BBB-824D-8579A3C7B017}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
