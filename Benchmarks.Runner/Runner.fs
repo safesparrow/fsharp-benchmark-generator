@@ -149,8 +149,25 @@ module NuGet =
         |> makeReference
         |> NuGetReferenceList
 
-let private makeConfig (cliConfig : IConfig) (versions : NuGetFCSVersion list) (inputFile : string) =
-    let baseJob = Job.Dry.WithWarmupCount(1)
+type RunnerArgs =
+    {
+        [<Option("input", Required = true, HelpText = "Input json")>]
+        Input : string
+        [<Option("official", Required = false, HelpText = "List of official NuGet versions of FCS to test")>]
+        OfficialVersions : string seq
+        [<Option("local", Required = false, HelpText = "List of local NuGet source directories to use as sources of FCS dll to test")>]
+        LocalNuGetSourceDirs : string seq
+        [<Option("iterations", Required = false, Default = 1, HelpText = "Number of iterations - BDN's '--iteration-count'")>]
+        Iterations : int
+        [<Option("warmups", Required = false, Default = 1, HelpText = "Number of warmups")>]
+        Warmups : int
+    }
+
+let private makeConfig (versions : NuGetFCSVersion list) (args : RunnerArgs) : IConfig =
+    let baseJob =
+        Job.Dry
+            .WithWarmupCount(args.Warmups)
+            .WithIterationCount(args.Iterations)
     let jobs =
         versions
         |> List.mapi (
@@ -158,7 +175,7 @@ let private makeConfig (cliConfig : IConfig) (versions : NuGetFCSVersion list) (
                 let job =
                     baseJob
                         .WithNuGet(NuGet.makeReferenceList v)
-                        .WithEnvironmentVariable(FCSBenchmark.InputEnvironmentVariable, inputFile)
+                        .WithEnvironmentVariable(FCSBenchmark.InputEnvironmentVariable, args.Input)
                         .WithId(match v with NuGetFCSVersion.Official v -> v | NuGetFCSVersion.Local source -> source)
                 job
         )
@@ -172,22 +189,8 @@ let private makeConfig (cliConfig : IConfig) (versions : NuGetFCSVersion list) (
     let config = config.AddDiagnoser(d.GetDiagnosers() |> Seq.toArray)
     let config = config.AddValidator(d.GetValidators() |> Seq.toArray)
     let config = config.AddExporter(JsonExporter(indentJson = true))
-    config.UnionRule <- ConfigUnionRule.AlwaysUseGlobal
-    let config = ManualConfig.Union(config, cliConfig)
     let config = List.fold (fun (config : IConfig) (job : Job) -> config.AddJob(job)) config jobs
     config
-
-type RunnerArgs =
-    {
-        [<Option("input", Required = true, HelpText = "Input json")>]
-        Input : string
-        [<Option("official", Required = false, HelpText = "List of official NuGet versions of FCS to test")>]
-        OfficialVersions : string seq
-        [<Option("local", Required = false, HelpText = "List of local NuGet source directories to use as sources of FCS dll to test")>]
-        LocalNuGetSourceDirs : string seq
-        [<Option("bdnargs", Required = false, Default = "", HelpText = "Extra BDN arguments")>]
-        BdnArgs : string
-    }
 
 [<EntryPoint>]
 let main args =
@@ -196,20 +199,13 @@ let main args =
     match result with
     | :? Parsed<RunnerArgs> as parsed ->
         let versions = parseVersions parsed.Value.OfficialVersions parsed.Value.LocalNuGetSourceDirs
-        let args =
-            Microsoft.CodeAnalysis.CommandLineParser.SplitCommandLineIntoArguments(parsed.Value.BdnArgs, false)
-            |> Seq.toArray
-        let struct(valid, cliConfig, options) = BenchmarkDotNet.ConsoleArguments.ConfigParser.Parse(args, ConsoleLogger.Default)
-        if not valid then
-            failwith $"Invalid --bdnargs string"
-        else
-            let defaultConfig = makeConfig cliConfig versions parsed.Value.Input
-            let summary = BenchmarkRunner.Run(typeof<FCSBenchmark>, defaultConfig, args)
-            let analyser = summary.BenchmarksCases[0].Config.GetCompositeAnalyser()
-            let conclusions = List<Conclusion>(analyser.Analyse(summary))
-            MarkdownExporter.Console.ExportToLog(summary, ConsoleLogger.Default)
-            ConclusionHelper.Print(ConsoleLogger.Ascii, conclusions)
-            printfn $"Full Log available in '{summary.LogFilePath}'"
-            printfn $"Reports available in '{summary.ResultsDirectoryPath}'"
-            0
+        let defaultConfig = makeConfig versions parsed.Value
+        let summary = BenchmarkRunner.Run(typeof<FCSBenchmark>, defaultConfig)
+        let analyser = summary.BenchmarksCases[0].Config.GetCompositeAnalyser()
+        let conclusions = List<Conclusion>(analyser.Analyse(summary))
+        MarkdownExporter.Console.ExportToLog(summary, ConsoleLogger.Default)
+        ConclusionHelper.Print(ConsoleLogger.Ascii, conclusions)
+        printfn $"Full Log available in '{summary.LogFilePath}'"
+        printfn $"Reports available in '{summary.ResultsDirectoryPath}'"
+        0
     | _ -> failwith "Parse error"

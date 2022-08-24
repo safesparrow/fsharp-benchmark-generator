@@ -141,7 +141,6 @@ module Generate =
     type Config =
         {
             CheckoutBaseDir : string
-            Iterations : int option
         }
     
     type Codebase =
@@ -296,7 +295,7 @@ module Generate =
         | NuGetFCSVersion.Official version -> $"--official={version}"
         | NuGetFCSVersion.Local sourceDir -> $"--local=\"{sourceDir}\""
     
-    let private prepareAndRun (config : Config) (case : BenchmarkCase) (dryRun : bool) (cleanup : bool) (bdnArgs : string option) (versions : NuGetFCSVersion list) =
+    let private prepareAndRun (config : Config) (case : BenchmarkCase) (dryRun : bool) (cleanup : bool) (iterations : int) (warmups : int) (versions : NuGetFCSVersion list) =
         let codebase = prepareCodebase config case
         let inputs = generateInputs case codebase.Path
         let inputsPath = makeInputsPath codebase.Path
@@ -326,17 +325,7 @@ module Generate =
                     | [] -> ""
                     | locals -> "--local " + String.Join(" ", locals)
                 o + " " + l
-            let bdnArgs =
-                seq {
-                    match bdnArgs with Some bdnArgs -> yield bdnArgs | None -> ()
-                    match config.Iterations with Some iterations -> yield $"--iterationCount={iterations}" | None -> ()
-                }
-                |> Seq.toList
-                |> fun args ->
-                    match args with
-                    | [] -> ""
-                    | args -> "--bdnargs=\"" + String.Join(" ", args) + "\""
-            let args = $"run -c Release -- --input={inputsPath} {versionsArgs} {bdnArgs}".Trim()
+            let args = $"run -c Release -- --input={inputsPath} --iterations={iterations} --warmups={warmups} {versionsArgs}".Trim()
             log.Information(
                 "Starting the benchmark:\n\
                  - Full BDN output can be found in {artifactFiles}.\n\
@@ -363,12 +352,12 @@ module Generate =
             DryRun : bool
             [<CommandLine.Option(Default = false, HelpText = "If set, removes the checkout directory afterwards. Doesn't apply to local codebases")>]
             Cleanup : bool
-            [<CommandLine.Option('n', "iterations", HelpText = "Number of iterations to run")>]
-            Iterations : int option
+            [<CommandLine.Option('n', "iterations", Default = 1, HelpText = "Number of iterations to run")>]
+            Iterations : int
+            [<CommandLine.Option('w', "warmups", Default = 1, HelpText = "Number of warmups to run")>]
+            Warmups : int
             [<CommandLine.Option('v', "verbose", Default = false, HelpText = "Verbose logging. Includes output of all preparation steps.")>]
             Verbose : bool
-            [<CommandLine.Option('b', "bdnargs", HelpText = "Additional BDN arguments as a single string")>]
-            BdnArgs : string option
             [<Option("official", Required = false, HelpText = "A list of publically available FCS NuGet versions to test.")>]
             OfficialVersions : string seq
             [<Option("local", Required = false, HelpText = "A list of local NuGet sources to use for testing locally-generated FCS nupkg files.")>]
@@ -387,7 +376,6 @@ module Generate =
             let config =
                 {
                     Config.CheckoutBaseDir = args.CheckoutsDir
-                    Config.Iterations = args.Iterations
                 }
             let case =
                 use _ = LogContext.PushProperty("step", "Read input")
@@ -418,7 +406,7 @@ module Generate =
             
             use _ = LogContext.PushProperty("step", "PrepareAndRun")
             let versions = parseVersions args.OfficialVersions args.LocalNuGetSourceDirs
-            prepareAndRun config case args.DryRun args.Cleanup args.BdnArgs versions
+            prepareAndRun config case args.DryRun args.Cleanup args.Iterations args.Warmups versions
         with ex ->
             if args.Verbose then
                 log.Fatal(ex, "Failure.")
