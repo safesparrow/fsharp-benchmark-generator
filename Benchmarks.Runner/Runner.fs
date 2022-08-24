@@ -26,8 +26,8 @@ open NuGet.Versioning
 
 
 [<MemoryDiagnoser>]
-type FCSBenchmark () =
-        
+type FCSBenchmark () =    
+    
     let printDiagnostics (results : FSharpCheckFileResults) =
         match results.Diagnostics with
         | [||] -> ()
@@ -58,9 +58,11 @@ type FCSBenchmark () =
             
     let mutable setup : (FSharpChecker * BenchmarkAction list) option = None
         
+    static member InputEnvironmentVariable = "FcsBenchmarkInput"
+        
     [<GlobalSetup>]
     member _.Setup() =
-        let inputFile = Environment.GetEnvironmentVariable("FcsBenchmarkInput")
+        let inputFile = Environment.GetEnvironmentVariable(FCSBenchmark.InputEnvironmentVariable)
         if File.Exists(inputFile) then
             printfn $"Deserializing inputs from '{inputFile}'"
             let json = File.ReadAllText(inputFile)
@@ -84,9 +86,10 @@ type FCSBenchmark () =
         setup
         |> Option.iter (fun (checker, _) -> cleanCaches checker)
 
-let fcsPackageName = "FSharp.Compiler.Service"
-
 module NuGet =
+
+    let private fcsPackageName = "FSharp.Compiler.Service"
+    let private fsharpCorePackageName = "FSharp.Core"
 
     let findFSharpCoreVersion (fcsVersion : string) =
         use cache = new SourceCacheContext()
@@ -104,20 +107,37 @@ module NuGet =
             NuGetReference("FSharp.Core", core.OriginalVersion, prerelease=false)
         ]
 
-    let extractFCSNuPkgVersion (file : string) : string option =
-        match System.Text.RegularExpressions.Regex.Match(file.ToLowerInvariant(), $".*{fcsPackageName.ToLowerInvariant()}.([0-9_\-\.]+).nupkg") with
+    let extractNuPkgVersion (packageName : string) (file : string) : string option =
+        match System.Text.RegularExpressions.Regex.Match(file.ToLowerInvariant(), $".*{packageName.ToLowerInvariant()}.([0-9_\-\.]+).nupkg") with
         | res when res.Success -> res.Groups[1].Value |> Some
         | _ -> None
         
-    let inferLocalNuGetVersion (sourceDir : string) =
-        let files = Directory.EnumerateFiles(sourceDir, $"{fcsPackageName}.*.nupkg") |> Seq.toArray
-        files
-        |> Array.choose extractFCSNuPkgVersion
-        |> Array.exactlyOne
+    let inferLocalNuGetVersion (sourceDir : string) (packageName : string) =
+        let files = Directory.EnumerateFiles(sourceDir, $"{packageName}.*.nupkg") |> Seq.toArray
+        let x = files|> Array.choose (extractNuPkgVersion packageName)
+        x |> Array.exactlyOne
 
     let localNuGet (sourceDir : string) =
-        let version = inferLocalNuGetVersion sourceDir
-        [NuGetReference(fcsPackageName, version, Uri(sourceDir), prerelease=false)]
+        let candidateDirs = [sourceDir; Path.Combine(sourceDir, "artifacts", "packages", "Release", "Release")]
+        candidateDirs
+        |> List.choose (fun sourceDir ->
+            try
+                [
+                    fcsPackageName, inferLocalNuGetVersion sourceDir fcsPackageName
+                    fsharpCorePackageName, inferLocalNuGetVersion sourceDir fsharpCorePackageName
+                ]
+                |> List.map (fun (name, version) -> NuGetReference(name, version, Uri(sourceDir), prerelease=false))
+                |> Some
+            with _ -> None
+        )
+        |> function
+            | [] ->
+                let candidateDirsString =
+                    String.Join(Environment.NewLine, candidateDirs |> List.map (fun dir -> $" - {dir}"))
+                failwith $"Could not find nupkg files with sourceDir='{sourceDir}.'\n\
+                               Attempted the following candidate directories:\n\
+                               {candidateDirsString}"
+            | head :: _ -> head
        
     let makeReference (version : NuGetFCSVersion) =
         match version with
@@ -135,7 +155,7 @@ let private defaultConfig (versions : NuGetFCSVersion list) (inputFile : string)
         versions
         |> List.map NuGet.makeReferenceList
         |> List.map baseJob.WithNuGet
-        |> List.map (fun j -> j.WithEnvironmentVariable("FcsBenchmarkInput", inputFile))
+        |> List.map (fun j -> j.WithEnvironmentVariable(FCSBenchmark.InputEnvironmentVariable, inputFile))
     
     let d = DefaultConfig.Instance
     let config = ManualConfig.CreateEmpty()
@@ -150,7 +170,7 @@ let private defaultConfig (versions : NuGetFCSVersion list) (inputFile : string)
     config.UnionRule <- ConfigUnionRule.AlwaysUseGlobal
     config
 
-type Args =
+type RunnerArgs =
     {
         [<Option("input", Required = true, HelpText = "Input json")>]
         Input : string
@@ -165,19 +185,20 @@ type Args =
 [<EntryPoint>]
 let main args =
     use parser = new Parser(fun x -> x.IgnoreUnknownArguments <- false)
-    let result = parser.ParseArguments<Args>(args)
+    let result = parser.ParseArguments<RunnerArgs>(args)
     match result with
-    | :? Parsed<Args> as parsed ->
+    | :? Parsed<RunnerArgs> as parsed ->
         let versions = parseVersions parsed.Value.OfficialVersions parsed.Value.LocalNuGetSourceDirs
         let defaultConfig = defaultConfig versions parsed.Value.Input
         let args =
             Microsoft.CodeAnalysis.CommandLineParser.SplitCommandLineIntoArguments(parsed.Value.BdnArgs, false)
             |> Seq.toArray
         let summary = BenchmarkRunner.Run(typeof<FCSBenchmark>, defaultConfig, args)
-        let logger = ConsoleLogger.Default
         let analyser = summary.BenchmarksCases[0].Config.GetCompositeAnalyser()
         let conclusions = List<Conclusion>(analyser.Analyse(summary))
-        MarkdownExporter.Console.ExportToLog(summary, logger);
+        MarkdownExporter.Console.ExportToLog(summary, ConsoleLogger.Default)
         ConclusionHelper.Print(ConsoleLogger.Ascii, conclusions)
+        printfn $"Full Log available in '{summary.LogFilePath}'"
+        printfn $"Reports available in '{summary.ResultsDirectoryPath}'"
         0
     | _ -> failwith "Parse error"

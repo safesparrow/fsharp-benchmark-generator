@@ -40,10 +40,7 @@ module Utils =
         let p = new Process(StartInfo = info)
         p.EnableRaisingEvents <- true
         p.OutputDataReceived.Add(fun args -> log.Write(outputLogLevel, args.Data))
-        p.ErrorDataReceived.Add(fun args ->
-            log.Information(args.Data)
-            log.Error(args.Data)
-        )
+        p.ErrorDataReceived.Add(fun args -> log.Error(args.Data))
         p.Start() |> ignore
         p.BeginErrorReadLine()
         p.BeginOutputReadLine()
@@ -346,9 +343,6 @@ module Generate =
                  - Full commandline: '{exe} {args}'\n\
                  - Working directory: '{dir}'.", $"{bdnArtifactsDir}/*.log", exe, args, workingDir)
             Utils.runProcess exe args workingDir envVariables LogEventLevel.Information
-            
-            let res = readJsonResultsSummary bdnArtifactsDir benchmarkClass
-            log.Information("Detailed results can be found in {resultsDir}.", Path.Combine(bdnArtifactsDir, "results"))
         else
             log.Information("Not running the benchmark as requested")
             
