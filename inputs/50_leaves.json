@@ -8,7 +8,7 @@
   "CheckActions": [
     {
       "FileName": "library.fs",
-      "ProjectName": "root",
+      "ProjectName": "root"
     }
   ]
 }

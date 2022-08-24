@@ -149,17 +149,22 @@ module NuGet =
         |> makeReference
         |> NuGetReferenceList
 
-let private defaultConfig (versions : NuGetFCSVersion list) (inputFile : string) =
-    let baseJob = Job.Dry
+let private makeConfig (cliConfig : IConfig) (versions : NuGetFCSVersion list) (inputFile : string) =
+    let baseJob = Job.Dry.WithWarmupCount(1)
     let jobs =
         versions
-        |> List.map NuGet.makeReferenceList
-        |> List.map baseJob.WithNuGet
-        |> List.map (fun j -> j.WithEnvironmentVariable(FCSBenchmark.InputEnvironmentVariable, inputFile))
+        |> List.mapi (
+            fun i v ->
+                let job =
+                    baseJob
+                        .WithNuGet(NuGet.makeReferenceList v)
+                        .WithEnvironmentVariable(FCSBenchmark.InputEnvironmentVariable, inputFile)
+                        .WithId(match v with NuGetFCSVersion.Official v -> v | NuGetFCSVersion.Local source -> source)
+                job
+        )
     
     let d = DefaultConfig.Instance
     let config = ManualConfig.CreateEmpty()
-    let config = List.fold (fun (config : IConfig) (job : Job) -> config.AddJob(job)) config jobs
     let config = config.AddLogger(BenchmarkDotNet.Loggers.NullLogger.Instance)
     let config = config.AddExporter(d.GetExporters() |> Seq.toArray)
     let config = config.AddAnalyser(d.GetAnalysers() |> Seq.toArray)
@@ -168,6 +173,8 @@ let private defaultConfig (versions : NuGetFCSVersion list) (inputFile : string)
     let config = config.AddValidator(d.GetValidators() |> Seq.toArray)
     let config = config.AddExporter(JsonExporter(indentJson = true))
     config.UnionRule <- ConfigUnionRule.AlwaysUseGlobal
+    let config = ManualConfig.Union(config, cliConfig)
+    let config = List.fold (fun (config : IConfig) (job : Job) -> config.AddJob(job)) config jobs
     config
 
 type RunnerArgs =
@@ -178,7 +185,7 @@ type RunnerArgs =
         OfficialVersions : string seq
         [<Option("local", Required = false, HelpText = "List of local NuGet source directories to use as sources of FCS dll to test")>]
         LocalNuGetSourceDirs : string seq
-        [<Option("bdnargs", Required = false, HelpText = "Extra BDN arguments")>]
+        [<Option("bdnargs", Required = false, Default = "", HelpText = "Extra BDN arguments")>]
         BdnArgs : string
     }
 
@@ -189,16 +196,20 @@ let main args =
     match result with
     | :? Parsed<RunnerArgs> as parsed ->
         let versions = parseVersions parsed.Value.OfficialVersions parsed.Value.LocalNuGetSourceDirs
-        let defaultConfig = defaultConfig versions parsed.Value.Input
         let args =
             Microsoft.CodeAnalysis.CommandLineParser.SplitCommandLineIntoArguments(parsed.Value.BdnArgs, false)
             |> Seq.toArray
-        let summary = BenchmarkRunner.Run(typeof<FCSBenchmark>, defaultConfig, args)
-        let analyser = summary.BenchmarksCases[0].Config.GetCompositeAnalyser()
-        let conclusions = List<Conclusion>(analyser.Analyse(summary))
-        MarkdownExporter.Console.ExportToLog(summary, ConsoleLogger.Default)
-        ConclusionHelper.Print(ConsoleLogger.Ascii, conclusions)
-        printfn $"Full Log available in '{summary.LogFilePath}'"
-        printfn $"Reports available in '{summary.ResultsDirectoryPath}'"
-        0
+        let struct(valid, cliConfig, options) = BenchmarkDotNet.ConsoleArguments.ConfigParser.Parse(args, ConsoleLogger.Default)
+        if not valid then
+            failwith $"Invalid --bdnargs string"
+        else
+            let defaultConfig = makeConfig cliConfig versions parsed.Value.Input
+            let summary = BenchmarkRunner.Run(typeof<FCSBenchmark>, defaultConfig, args)
+            let analyser = summary.BenchmarksCases[0].Config.GetCompositeAnalyser()
+            let conclusions = List<Conclusion>(analyser.Analyse(summary))
+            MarkdownExporter.Console.ExportToLog(summary, ConsoleLogger.Default)
+            ConclusionHelper.Print(ConsoleLogger.Ascii, conclusions)
+            printfn $"Full Log available in '{summary.LogFilePath}'"
+            printfn $"Reports available in '{summary.ResultsDirectoryPath}'"
+            0
     | _ -> failwith "Parse error"

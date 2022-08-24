@@ -14,6 +14,7 @@
           <Link>Dtos.fs</Link>
         </Compile>
         <Compile Include="Runner.fs" />
+        <Content Include="README.md" />
     </ItemGroup>
 
     <ItemGroup>
