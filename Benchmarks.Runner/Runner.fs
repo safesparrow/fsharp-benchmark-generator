@@ -1,12 +1,16 @@
 ﻿module Benchmarks.Runner
 
 open System
+open System.Collections.Generic
 open System.IO
 open System.Threading
+open BenchmarkDotNet.Analysers
 open BenchmarkDotNet.Configs
 open BenchmarkDotNet.Engines
+open BenchmarkDotNet.Exporters
 open BenchmarkDotNet.Exporters.Json
 open BenchmarkDotNet.Jobs
+open BenchmarkDotNet.Loggers
 open FSharp.Compiler.CodeAnalysis
 open BenchmarkDotNet.Attributes
 open BenchmarkDotNet.Running
@@ -133,20 +137,30 @@ let private defaultConfig (versions : NuGetFCSVersion list) (inputFile : string)
         |> List.map baseJob.WithNuGet
         |> List.map (fun j -> j.WithEnvironmentVariable("FcsBenchmarkInput", inputFile))
     
-    Console.WriteLine("inputFile: " + inputFile)
-    let config = List.fold (fun (config : IConfig) (job : Job) -> config.AddJob(job)) DefaultConfig.Instance jobs
-    config.AddExporter(JsonExporter(indentJson = true))
+    let d = DefaultConfig.Instance
+    let config = ManualConfig.CreateEmpty()
+    let config = List.fold (fun (config : IConfig) (job : Job) -> config.AddJob(job)) config jobs
+    let config = config.AddLogger(BenchmarkDotNet.Loggers.NullLogger.Instance)
+    let config = config.AddExporter(d.GetExporters() |> Seq.toArray)
+    let config = config.AddAnalyser(d.GetAnalysers() |> Seq.toArray)
+    let config = config.AddColumnProvider(d.GetColumnProviders() |> Seq.toArray)
+    let config = config.AddDiagnoser(d.GetDiagnosers() |> Seq.toArray)
+    let config = config.AddValidator(d.GetValidators() |> Seq.toArray)
+    let config = config.AddExporter(JsonExporter(indentJson = true))
+    config.UnionRule <- ConfigUnionRule.AlwaysUseGlobal
+    config
 
-type Args = {
-    [<Option("input", Required = true, HelpText = "Input json")>]
-    Input : string
-    [<Option("official", Required = false, HelpText = "Official version list.")>]
-    OfficialVersions : string seq
-    [<Option("local", Required = false, HelpText = "Local nuget source list.")>]
-    LocalNuGetSourceDirs : string seq
-    [<Option("bdnargs", Required = false)>]
-    BdnArgs : string
-}
+type Args =
+    {
+        [<Option("input", Required = true, HelpText = "Input json")>]
+        Input : string
+        [<Option("official", Required = false, HelpText = "List of official NuGet versions of FCS to test")>]
+        OfficialVersions : string seq
+        [<Option("local", Required = false, HelpText = "List of local NuGet source directories to use as sources of FCS dll to test")>]
+        LocalNuGetSourceDirs : string seq
+        [<Option("bdnargs", Required = false, HelpText = "Extra BDN arguments")>]
+        BdnArgs : string
+    }
 
 [<EntryPoint>]
 let main args =
@@ -160,5 +174,10 @@ let main args =
             Microsoft.CodeAnalysis.CommandLineParser.SplitCommandLineIntoArguments(parsed.Value.BdnArgs, false)
             |> Seq.toArray
         let summary = BenchmarkRunner.Run(typeof<FCSBenchmark>, defaultConfig, args)
+        let logger = ConsoleLogger.Default
+        let analyser = summary.BenchmarksCases[0].Config.GetCompositeAnalyser()
+        let conclusions = List<Conclusion>(analyser.Analyse(summary))
+        MarkdownExporter.Console.ExportToLog(summary, logger);
+        ConclusionHelper.Print(ConsoleLogger.Ascii, conclusions)
         0
     | _ -> failwith "Parse error"

@@ -144,7 +144,6 @@ module Generate =
     type Config =
         {
             CheckoutBaseDir : string
-            FcsDllPath : string option // defaults to a NuGet package
             Iterations : int option
         }
     
@@ -261,18 +260,6 @@ module Generate =
         projInfoEnvVariables
         |> List.map (fun var -> var, "")
         
-    module MSBuildProps =
-        let makeDefault () =
-            [
-                "FcsReferenceType", "nuget"
-                "FcsNugetVersion", "41.0.5"
-            ]
-        let makeDll (fcsDllPath : string) =
-            [
-                "FcsReferenceType", "dll"
-                "FcsDllPath", fcsDllPath 
-            ]
-    
     let private resultsJsonPath (bdnArtifactDir : string) (benchmarkName : string) =
         Path.Combine(bdnArtifactDir, $@"results/{benchmarkName}-report.json")
     
@@ -324,17 +311,7 @@ module Generate =
         if dryRun = false then
             use _ = LogContext.PushProperty("step", "Run")
             let workingDir = Path.Combine(Path.GetDirectoryName(Assembly.GetAssembly(typeof<RepoSetup.RepoSpec>).Location), "Benchmarks.Runner")
-            let additionalEnvVariables =
-                match config.FcsDllPath with
-                | None -> MSBuildProps.makeDefault()
-                | Some fcsDllPath ->
-                    let absolutePath = Path.Combine(workingDir, fcsDllPath)
-                    if File.Exists absolutePath |> not then
-                        failwith $"Given FCS dll path doesn't exist: {absolutePath}"
-                    MSBuildProps.makeDll fcsDllPath
-            let envVariables =
-                additionalEnvVariables
-                @ emptyProjInfoEnvironmentVariables()
+            let envVariables = emptyProjInfoEnvironmentVariables()
             let bdnArtifactsDir = Path.Combine(workingDir, "BenchmarkDotNet.Artifacts")
             let benchmarkClass = "Benchmarks.Runner.FCSBenchmark"
             let exe = "dotnet"
@@ -363,12 +340,15 @@ module Generate =
                     | [] -> ""
                     | args -> "--bdnargs=\"" + String.Join(" ", args) + "\""
             let args = $"run -c Release -- --input={inputsPath} {versionsArgs} {bdnArgs}".Trim()
-            log.Information("Starting the benchmark. Full BDN output can be found in {artifactFiles}. Full commandline: '{exe} {args}' in '{dir}'.", $"{bdnArtifactsDir}/*.log", exe, args, workingDir)
-            Utils.runProcess exe args workingDir envVariables LogEventLevel.Verbose
+            log.Information(
+                "Starting the benchmark:\n\
+                 - Full BDN output can be found in {artifactFiles}.\n\
+                 - Full commandline: '{exe} {args}'\n\
+                 - Working directory: '{dir}'.", $"{bdnArtifactsDir}/*.log", exe, args, workingDir)
+            Utils.runProcess exe args workingDir envVariables LogEventLevel.Information
             
             let res = readJsonResultsSummary bdnArtifactsDir benchmarkClass
             log.Information("Detailed results can be found in {resultsDir}.", Path.Combine(bdnArtifactsDir, "results"))
-            log.Information("Result summary: Mean={mean:0.#}s, Allocated={allocatedMB:0}MB.", res.MeanS, res.AllocatedMB)
         else
             log.Information("Not running the benchmark as requested")
             
@@ -389,8 +369,6 @@ module Generate =
             DryRun : bool
             [<CommandLine.Option(Default = false, HelpText = "If set, removes the checkout directory afterwards. Doesn't apply to local codebases")>]
             Cleanup : bool
-            [<CommandLine.Option('f', "fcsdll", HelpText = "Path to the FSharp.Compiler.Service.dll to benchmark - by default a NuGet package is used instead")>]
-            FcsDllPath : string option
             [<CommandLine.Option('n', "iterations", HelpText = "Number of iterations to run")>]
             Iterations : int option
             [<CommandLine.Option('v', "verbose", Default = false, HelpText = "Verbose logging. Includes output of all preparation steps.")>]
@@ -415,7 +393,6 @@ module Generate =
             let config =
                 {
                     Config.CheckoutBaseDir = args.CheckoutsDir
-                    Config.FcsDllPath = args.FcsDllPath
                     Config.Iterations = args.Iterations
                 }
             let case =
