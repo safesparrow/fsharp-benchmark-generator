@@ -25,7 +25,6 @@
         <None Include=".gitignore" />
         <None Include="README.md" />
         <None CopyToOutputDirectory="PreserveNewest" Include="Benchmarks.Runner\Runner.fs" />
-        <None CopyToOutputDirectory="PreserveNewest" Include="Benchmarks.Runner\README.md" />
         <None CopyToOutputDirectory="PreserveNewest" Include="Benchmarks.Runner\Benchmarks.Runner.fsproj" />
     </ItemGroup>
     
