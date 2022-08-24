@@ -165,7 +165,7 @@ type RunnerArgs =
 
 let private makeConfig (versions : NuGetFCSVersion list) (args : RunnerArgs) : IConfig =
     let baseJob =
-        Job.Dry
+        Job.ShortRun
             .WithWarmupCount(args.Warmups)
             .WithIterationCount(args.Iterations)
     let jobs =

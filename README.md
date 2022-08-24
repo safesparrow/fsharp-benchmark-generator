@@ -73,33 +73,33 @@ For more CLI options use `dotnet run --help`
 <summary>Sample output:</summary>
 
 ```bash
-[23:34:17 INF] PrepareCodebase: Preparing repo fantomas (https://github.com/fsprojects/fantomas) @ 0fe6785076e045f28e4c88e6a57dd09b649ce671
-[23:34:17 INF] PrepareCodebase: .artifacts\fantomas\0fe6785076e045f28e4c88e6a57dd09b649ce671 already exists - will assume the correct repository is already checked out
-[23:34:17 INF] PrepareCodebase: Running 3 codebase prep steps
-[23:34:20 INF] LoadOptions: 7 projects loaded from C:\projekty\fsharp\fsharp-benchmark-generator\.artifacts\fantomas\0fe6785076e045f28e4c88e6a57dd09b649ce671\fantomas.sln
-[23:34:20 INF] PrepareAndRun: Serializing inputs as C:\projekty\fsharp\fsharp-benchmark-generator\.artifacts\fantomas\0fe6785076e045f28e4c88e6a57dd09b649ce671\.artifacts\2022-08-24_22-34-20.fcsinputs.json
-[23:34:20 INF] Run: Starting the benchmark:
+[23:55:02 INF] PrepareCodebase: Preparing repo fantomas (https://github.com/fsprojects/fantomas) @ 0fe6785076e045f28e4c88e6a57dd09b649ce671
+[23:55:02 INF] PrepareCodebase: .artifacts\fantomas\0fe6785076e045f28e4c88e6a57dd09b649ce671 already exists - will assume the correct repository is already checked out
+[23:55:02 INF] PrepareCodebase: Running 3 codebase prep steps
+[23:55:05 INF] LoadOptions: 7 projects loaded from C:\projekty\fsharp\fsharp-benchmark-generator\.artifacts\fantomas\0fe6785076e045f28e4c88e6a57dd09b649ce671\fantomas.sln
+[23:55:05 INF] PrepareAndRun: Serializing inputs as C:\projekty\fsharp\fsharp-benchmark-generator\.artifacts\fantomas\0fe6785076e045f28e4c88e6a57dd09b649ce671\.artifacts\2022-08-24_22-55-05.fcsinputs.json
+[23:55:05 INF] Run: Starting the benchmark:
 - Full BDN output can be found in C:\projekty\fsharp\fsharp-benchmark-generator\bin\Release\net6.0\Benchmarks.Runner\BenchmarkDotNet.Artifacts/*.log.
-- Full commandline: 'dotnet run -c Release -- --input=C:\projekty\fsharp\fsharp-benchmark-generator\.artifacts\fantomas\0fe6785076e045f28e4c88e6a57dd09b649ce671\.artifacts\2022-08-24_22-34-20.fcsinputs.json --iterations=2 --warmups=1 --official 41.0.5 41.0.2 --local c:\projekty\fsharp\fsharp_main'
+- Full commandline: 'dotnet run -c Release -- --input=C:\projekty\fsharp\fsharp-benchmark-generator\.artifacts\fantomas\0fe6785076e045f28e4c88e6a57dd09b649ce671\.artifacts\2022-08-24_22-55-05.fcsinputs.json --iterations=2 --warmups=1 --official 41.0.5 41.0.2 --local c:\projekty\fsharp\fsharp_main'
 - Working directory: 'C:\projekty\fsharp\fsharp-benchmark-generator\bin\Release\net6.0\Benchmarks.Runner'.
-[23:36:14 INF] Run:
-[23:36:14 INF] Run: BenchmarkDotNet=v0.13.1, OS=Windows 10.0.22621
-[23:36:14 INF] Run: AMD Ryzen 7 5700G with Radeon Graphics, 1 CPU, 16 logical and 8 physical cores
-[23:36:14 INF] Run:   [Host]                         : .NET Framework 4.8 (4.8.9075.0), X64 LegacyJIT DEBUG
-[23:36:14 INF] Run:   41.0.2                         : .NET Framework 4.8 (4.8.9075.0), X64 RyuJIT
-[23:36:14 INF] Run:   41.0.5                         : .NET Framework 4.8 (4.8.9075.0), X64 RyuJIT
-[23:36:14 INF] Run:   c:\projekty\fsharp\fsharp_main : .NET Framework 4.8 (4.8.9075.0), X64 RyuJIT
-[23:36:14 INF] Run:
-[23:36:14 INF] Run: EnvironmentVariables=FcsBenchmarkInput=C:\projekty\fsharp\fsharp-benchmark-generator\.artifacts\fantomas\0fe6785076e045f28e4c88e6a57dd09b649ce671\.artifacts\2022-08-24_22-34-20.fcsinputs.json  IterationCount=2  LaunchCount=1
-[23:36:14 INF] Run: RunStrategy=ColdStart  UnrollFactor=1  WarmupCount=1
-[23:36:14 INF] Run:
-[23:36:14 INF] Run: | Method |                            Job |                                  NuGetReferences |    Mean | Error |  StdDev |       Gen 0 |       Gen 1 |     Gen 2 | Allocated |
-[23:36:14 INF] Run: |------- |------------------------------- |------------------------------------------------- |--------:|------:|--------:|------------:|------------:|----------:|----------:|
-[23:36:14 INF] Run: |    Run |                         41.0.2 | FSharp.Compiler.Service 41.0.2,FSharp.Core 6.0.2 | 12.35 s |    NA | 2.585 s | 692000.0000 | 134000.0000 | 7000.0000 |      4 GB |
-[23:36:14 INF] Run: |    Run |                         41.0.5 | FSharp.Compiler.Service 41.0.5,FSharp.Core 6.0.5 | 12.09 s |    NA | 2.793 s | 704000.0000 | 141000.0000 | 7000.0000 |      4 GB |
-[23:36:14 INF] Run: |    Run | c:\projekty\fsharp\fsharp_main | FSharp.Compiler.Service 41.0.6,FSharp.Core 6.0.6 | 12.25 s |    NA | 2.799 s | 698000.0000 | 140000.0000 | 7000.0000 |      4 GB |
-[23:36:14 INF] Run: Full Log available in 'C:\projekty\fsharp\fsharp-benchmark-generator\bin\Release\net6.0\Benchmarks.Runner\BenchmarkDotNet.Artifacts\Benchmarks.Runner.FCSBenchmark-20220824-233422.log'
-[23:36:14 INF] Run: Reports available in 'C:\projekty\fsharp\fsharp-benchmark-generator\bin\Release\net6.0\Benchmarks.Runner\BenchmarkDotNet.Artifacts\results'
+[23:58:10 INF] Run:
+[23:58:10 INF] Run: BenchmarkDotNet=v0.13.1, OS=Windows 10.0.22621
+[23:58:10 INF] Run: AMD Ryzen 7 5700G with Radeon Graphics, 1 CPU, 16 logical and 8 physical cores
+[23:58:10 INF] Run:   [Host]                         : .NET Framework 4.8 (4.8.9075.0), X64 LegacyJIT DEBUG
+[23:58:10 INF] Run:   41.0.2                         : .NET Framework 4.8 (4.8.9075.0), X64 RyuJIT
+[23:58:10 INF] Run:   41.0.5                         : .NET Framework 4.8 (4.8.9075.0), X64 RyuJIT
+[23:58:10 INF] Run:   c:\projekty\fsharp\fsharp_main : .NET Framework 4.8 (4.8.9075.0), X64 RyuJIT
+[23:58:10 INF] Run:
+[23:58:10 INF] Run: EnvironmentVariables=FcsBenchmarkInput=C:\projekty\fsharp\fsharp-benchmark-generator\.artifacts\fantomas\0fe6785076e045f28e4c88e6a57dd09b649ce671\.artifacts\2022-08-24_22-55-05.fcsinputs.json  InvocationCount=1  IterationCount=2
+[23:58:10 INF] Run: LaunchCount=1  UnrollFactor=1  WarmupCount=1
+[23:58:10 INF] Run:
+[23:58:10 INF] Run: | Method |                            Job |                                  NuGetReferences |    Mean | Error |  StdDev |       Gen 0 |       Gen 1 |     Gen 2 | Allocated |
+[23:58:10 INF] Run: |------- |------------------------------- |------------------------------------------------- |--------:|------:|--------:|------------:|------------:|----------:|----------:|
+[23:58:10 INF] Run: |    Run |                         41.0.2 | FSharp.Compiler.Service 41.0.2,FSharp.Core 6.0.2 | 10.23 s |    NA | 0.256 s | 692000.0000 | 134000.0000 | 7000.0000 |      4 GB |
+[23:58:10 INF] Run: |    Run |                         41.0.5 | FSharp.Compiler.Service 41.0.5,FSharp.Core 6.0.5 | 10.22 s |    NA | 0.145 s | 704000.0000 | 140000.0000 | 7000.0000 |      4 GB |
+[23:58:10 INF] Run: |    Run | c:\projekty\fsharp\fsharp_main | FSharp.Compiler.Service 41.0.6,FSharp.Core 6.0.6 | 10.75 s |    NA | 0.547 s | 698000.0000 | 137000.0000 | 7000.0000 |      4 GB |
+[23:58:10 INF] Run: Full Log available in 'C:\projekty\fsharp\fsharp-benchmark-generator\bin\Release\net6.0\Benchmarks.Runner\BenchmarkDotNet.Artifacts\Benchmarks.Runner.FCSBenchmark-20220824-235509.log'
+[23:58:10 INF] Run: Reports available in 'C:\projekty\fsharp\fsharp-benchmark-generator\bin\Release\net6.0\Benchmarks.Runner\BenchmarkDotNet.Artifacts\results'
 ```
 
 </details>
