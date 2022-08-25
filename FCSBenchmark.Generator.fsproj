@@ -5,13 +5,15 @@
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
         <OutputType>exe</OutputType>
         <RunWorkingDirectory>$(MSBuildProjectDirectory)</RunWorkingDirectory>
-
-        <PackAsTool>true</PackAsTool>
-        <ToolCommandName>fcs-benchmark</ToolCommandName>
-        <PackageOutputPath>./nupkg</PackageOutputPath>
-        <PackageId>FCSBenchmark</PackageId>
         <Description>A tool for generating and running high-level benchmarks of the FSharp compiler service (FCS)</Description>
         <RootNamespace>FCSBenchmark.Generator</RootNamespace>
+
+        <PackageOutputPath>./nupkg</PackageOutputPath>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <PackageId>FCSBenchmark</PackageId>
+        <PackAsTool>true</PackAsTool>
+        <ToolCommandName>fcs-benchmark</ToolCommandName>
+        <PackageProjectUrl>https://github.com/safesparrow/fsharp-benchmark-generator</PackageProjectUrl>
 
     </PropertyGroup>
 
