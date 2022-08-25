@@ -9,7 +9,7 @@
         <PackAsTool>true</PackAsTool>
         <ToolCommandName>fcs-benchmark</ToolCommandName>
         <PackageOutputPath>./nupkg</PackageOutputPath>
-        <PackageId>FCSBenchmark.Generator</PackageId>
+        <PackageId>FCSBenchmark</PackageId>
         <Description>A tool for generating and running high-level benchmarks of the FSharp compiler service (FCS)</Description>
         <RootNamespace>FCSBenchmark.Generator</RootNamespace>
 
@@ -27,7 +27,6 @@
         <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
         <PackageReference Include="Serilog.Extensions.Logging" Version="3.1.0" />
         <PackageReference Include="Serilog.Sinks.Console" Version="4.0.1" />
-        <PackageReference Include="Nerdbank.GitVersioning" PrivateAssets="all" Version="3.5.109" />
         <PackageReference Include="Ionide.ProjInfo.FCS" Version="0.59.2" />
     </ItemGroup>
     
