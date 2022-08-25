@@ -1,0 +1,51 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+
+        <TargetFramework>net6.0</TargetFramework>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <OutputType>exe</OutputType>
+        <RunWorkingDirectory>$(MSBuildProjectDirectory)</RunWorkingDirectory>
+
+        <PackAsTool>true</PackAsTool>
+        <ToolCommandName>fcs-benchmark</ToolCommandName>
+        <PackageOutputPath>./nupkg</PackageOutputPath>
+        <PackageId>FCSBenchmark</PackageId>
+        <Description>A tool for generating and running high-level benchmarks of the FSharp compiler service (FCS)</Description>
+        <RootNamespace>FCSBenchmark.Generator</RootNamespace>
+
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="CommandLineParser.FSharp" Version="2.9.1" />
+        <PackageReference Include="LibGit2Sharp" Version="0.26.2" />
+        <PackageReference Include="Microsoft.Build.Framework" Version="17.2.0" ExcludeAssets="runtime" />
+        <PackageReference Include="Microsoft.Build.Locator" Version="1.4.1" />
+        <PackageReference Include="Microsoft.Build.Tasks.Core" Version="17.2.0" ExcludeAssets="runtime" />
+        <PackageReference Include="Microsoft.Build.Utilities.Core" Version="17.2.0" ExcludeAssets="runtime" />
+        <PackageReference Include="Microsoft.Extensions.Logging" Version="6.0.0" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="6.0.0" />
+        <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
+        <PackageReference Include="Serilog.Extensions.Logging" Version="3.1.0" />
+        <PackageReference Include="Serilog.Sinks.Console" Version="4.0.1" />
+        <PackageReference Include="Ionide.ProjInfo.FCS" Version="0.59.2" />
+    </ItemGroup>
+    
+    <ItemGroup>
+        <!-- Copied for use in FCSBenchmark.Runner -->
+        <None Include="FCSBenchmark.Runner\Runner.fs" CopyToOutputDirectory="PreserveNewest" />
+        <None CopyToOutputDirectory="PreserveNewest" Include="FCSBenchmark.Runner\FCSBenchmark.Runner.fsproj" />
+        <None Include="inputs/local_example.json" />
+        <None Include="inputs/50_leaves.json" />
+        <None Include="inputs/stress_big_dense.json" />
+        <None Include="inputs/fantomas.json" />
+        <None Include="inputs/stress_huge_dense.json" />
+        <None Include=".gitignore" />
+        <None Include="README.md" />
+        <Content Include="version.json" />
+        <Compile Include="Dtos.fs">
+          <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Compile>
+        <Compile Include="Generate.fs" />
+    </ItemGroup>
+
+</Project>

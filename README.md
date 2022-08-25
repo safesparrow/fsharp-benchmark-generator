@@ -1,4 +1,4 @@
-# Benchmarks.Generator
+# FCSBenchmark.Generator
 
 ## What is it
 A command-line app for generating and running benchmarks of FCS using high-level analysis definitions
@@ -17,7 +17,7 @@ Note that the generator is completely independent from the runner, including hav
 %%{init: {'theme':'base'}}%%
 graph LR;
     subgraph Generation
-        A1(Ionide.ProjInfo.FCS) --> A2(Benchmarks.Generator)
+        A1(Ionide.ProjInfo.FCS) --> A2(FCSBenchmark.Generator)
         A3 --> A1
         A3(FSharp.Compiler.Service NuGet) --> A2
         style A3 fill:#ddf
@@ -26,7 +26,7 @@ graph LR;
     A2 -.->|JSON| R2
     
     subgraph Running
-        R1(FSharp.Compiler.Service source or NuGet) --> R2(Benchmarks.Runner)
+        R1(FSharp.Compiler.Service source or NuGet) --> R2(FCSBenchmark.Runner)
         style R1 fill:#dfd
     end
 ```
@@ -39,7 +39,7 @@ graph TD;
     AA-->A
     AB(GitHub/Git server)
     AB-->|libgit2sharp|B
-    subgraph Benchmarks.Generator process
+    subgraph FCSBenchmark.Generator process
         A(Codebase spec and analysis actions)-->B(Locally checked out codebase);
         B-->|Codebase prep steps| B1(Prepared codebase)
         B1-->|Ionide.ProjInfo.FCS| C(FSharpProjectOptions)
@@ -50,19 +50,19 @@ graph TD;
     E-->|Newtonsoft.Json|F(FCS inputs.json)
     F-->|Newtonsoft.Json|G(JSON-friendly DTO)
     B1-->K
-    subgraph Benchmarks.Runner process
+    subgraph FCSBenchmark.Runner process
         G-->H(BenchmarkSpec')
-        J(FSharp.Compiler.Service source)-->K(Benchmarks.Runner)
+        J(FSharp.Compiler.Service source)-->K(FCSBenchmark.Runner)
         H-->K
     end
 ```
 ## How to use it
 Below command runs `Benchmark.Generator` and tests the analysis of the [Fantomas](https://github.com/fsprojects/fantomas) project using 3 different FCS versions: 
 ```bash
-dotnet run -c Release --project ./Benchmarks.Generator.fsproj -- -i .\inputs\fantomas.json --official 41.0.5 41.0.2 --local c:\projekty\fsharp\fsharp_main -n 1 
+dotnet run -c Release --project ./FCSBenchmark.Generator.fsproj -- -i .\inputs\fantomas.json --official 41.0.5 41.0.2 --local c:\projekty\fsharp\fsharp_main -n 1 
 ```
 Let's deconstruct it:
-- `dotnet run -c Release --project ./Benchmarks.Generator.fsproj` - boilerplate required to start the program
+- `dotnet run -c Release --project ./FCSBenchmark.Generator.fsproj` - boilerplate required to start the program
 - ` -- ` - indicates that the following arguments should be forwarded to the app rather than consumed by `dotnet`
 - `-i .\inputs\fantomas.json` - points to a benchmark definition
 - `--official 41.0.5 41.0.2` - specifies two FCS versions to be, available on public NuGet feed
@@ -79,9 +79,9 @@ For more CLI options use `dotnet run --help`
 [23:55:05 INF] LoadOptions: 7 projects loaded from C:\projekty\fsharp\fsharp-benchmark-generator\.artifacts\fantomas\0fe6785076e045f28e4c88e6a57dd09b649ce671\fantomas.sln
 [23:55:05 INF] PrepareAndRun: Serializing inputs as C:\projekty\fsharp\fsharp-benchmark-generator\.artifacts\fantomas\0fe6785076e045f28e4c88e6a57dd09b649ce671\.artifacts\2022-08-24_22-55-05.fcsinputs.json
 [23:55:05 INF] Run: Starting the benchmark:
-- Full BDN output can be found in C:\projekty\fsharp\fsharp-benchmark-generator\bin\Release\net6.0\Benchmarks.Runner\BenchmarkDotNet.Artifacts/*.log.
+- Full BDN output can be found in C:\projekty\fsharp\fsharp-benchmark-generator\bin\Release\net6.0\FCSBenchmark.Runner\BenchmarkDotNet.Artifacts/*.log.
 - Full commandline: 'dotnet run -c Release -- --input=C:\projekty\fsharp\fsharp-benchmark-generator\.artifacts\fantomas\0fe6785076e045f28e4c88e6a57dd09b649ce671\.artifacts\2022-08-24_22-55-05.fcsinputs.json --iterations=2 --warmups=1 --official 41.0.5 41.0.2 --local c:\projekty\fsharp\fsharp_main'
-- Working directory: 'C:\projekty\fsharp\fsharp-benchmark-generator\bin\Release\net6.0\Benchmarks.Runner'.
+- Working directory: 'C:\projekty\fsharp\fsharp-benchmark-generator\bin\Release\net6.0\FCSBenchmark.Runner'.
 [23:58:10 INF] Run:
 [23:58:10 INF] Run: BenchmarkDotNet=v0.13.1, OS=Windows 10.0.22621
 [23:58:10 INF] Run: AMD Ryzen 7 5700G with Radeon Graphics, 1 CPU, 16 logical and 8 physical cores
@@ -98,8 +98,8 @@ For more CLI options use `dotnet run --help`
 [23:58:10 INF] Run: |    Run |                         41.0.2 | FSharp.Compiler.Service 41.0.2,FSharp.Core 6.0.2 | 10.23 s |    NA | 0.256 s | 692000.0000 | 134000.0000 | 7000.0000 |      4 GB |
 [23:58:10 INF] Run: |    Run |                         41.0.5 | FSharp.Compiler.Service 41.0.5,FSharp.Core 6.0.5 | 10.22 s |    NA | 0.145 s | 704000.0000 | 140000.0000 | 7000.0000 |      4 GB |
 [23:58:10 INF] Run: |    Run | c:\projekty\fsharp\fsharp_main | FSharp.Compiler.Service 41.0.6,FSharp.Core 6.0.6 | 10.75 s |    NA | 0.547 s | 698000.0000 | 137000.0000 | 7000.0000 |      4 GB |
-[23:58:10 INF] Run: Full Log available in 'C:\projekty\fsharp\fsharp-benchmark-generator\bin\Release\net6.0\Benchmarks.Runner\BenchmarkDotNet.Artifacts\Benchmarks.Runner.FCSBenchmark-20220824-235509.log'
-[23:58:10 INF] Run: Reports available in 'C:\projekty\fsharp\fsharp-benchmark-generator\bin\Release\net6.0\Benchmarks.Runner\BenchmarkDotNet.Artifacts\results'
+[23:58:10 INF] Run: Full Log available in 'C:\projekty\fsharp\fsharp-benchmark-generator\bin\Release\net6.0\FCSBenchmark.Runner\BenchmarkDotNet.Artifacts\FCSBenchmark.Runner.FCSBenchmark-20220824-235509.log'
+[23:58:10 INF] Run: Reports available in 'C:\projekty\fsharp\fsharp-benchmark-generator\bin\Release\net6.0\FCSBenchmark.Runner\BenchmarkDotNet.Artifacts\results'
 ```
 
 </details>
