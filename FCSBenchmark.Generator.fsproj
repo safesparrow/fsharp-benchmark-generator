@@ -7,7 +7,9 @@
         <RunWorkingDirectory>$(MSBuildProjectDirectory)</RunWorkingDirectory>
         <Description>A tool for generating and running high-level benchmarks of the FSharp compiler service (FCS)</Description>
         <RootNamespace>FCSBenchmark.Generator</RootNamespace>
+        <NoWarn>NU1608</NoWarn>
 
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
         <PackageOutputPath>./nupkg</PackageOutputPath>
         <PackageLicenseExpression>MIT</PackageLicenseExpression>
         <PackageId>FCSBenchmark</PackageId>
