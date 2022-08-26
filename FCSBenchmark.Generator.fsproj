@@ -38,11 +38,7 @@
         <None Include="FCSBenchmark.Runner\Dtos.fs" CopyToOutputDirectory="PreserveNewest" />
         <None Include="FCSBenchmark.Runner\Runner.fs" CopyToOutputDirectory="PreserveNewest" />
         <None Include="FCSBenchmark.Runner\FCSBenchmark.Runner.fsproj" CopyToOutputDirectory="PreserveNewest" />
-        <None Include="inputs/local_example.json" />
-        <None Include="inputs/50_leaves.json" />
-        <None Include="inputs/stress_big_dense.json" />
-        <None Include="inputs/fantomas.json" />
-        <None Include="inputs/stress_huge_dense.json" />
+        <None Include="inputs/*.json" CopyToOutputDirectory="PreserveNewest" />
         <None Include=".gitignore" />
         <None Include="README.md" />
         <Content Include="version.json" />

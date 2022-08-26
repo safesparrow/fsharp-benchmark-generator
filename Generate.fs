@@ -366,8 +366,10 @@ module Generate =
         {
             [<CommandLine.Option('c', Default = ".artifacts", HelpText = "Base directory for git checkouts")>]
             CheckoutsDir : string
-            [<CommandLine.Option('i', Required = true, HelpText = "Path to the input file describing the benchmark")>]
+            [<CommandLine.Option('i', SetName = "input", HelpText = "Path to the input file describing the benchmark")>]
             Input : string
+            [<CommandLine.Option("sample", SetName = "input", HelpText = "Use a predefined sample benchmark with the given name")>]
+            SampleInput : string
             [<CommandLine.Option("dry-run", HelpText = "If set, prepares the benchmark and prints the commandline to run it, then exits")>]
             DryRun : bool
             [<CommandLine.Option(Default = false, HelpText = "If set, removes the checkout directory afterwards. Doesn't apply to local codebases")>]
@@ -400,7 +402,27 @@ module Generate =
             let case =
                 use _ = LogContext.PushProperty("step", "Read input")
                 try
-                    let path = args.Input
+                    let path =
+                        match args.Input |> Option.ofObj, args.SampleInput |> Option.ofObj with
+                        | None, None -> failwith $"No input specified"
+                        | Some input, _ -> input
+                        | None, Some sample ->
+                            let assemblyDir = Path.GetDirectoryName(Assembly.GetAssembly(typeof<Args>).Location)
+                            let path = Path.Combine(assemblyDir, "inputs", $"{sample}.json")
+                            if File.Exists(path) then path
+                            else
+                                let dir = Path.GetDirectoryName(path)
+                                if Directory.Exists(dir) then
+                                    let samples =
+                                        Directory.EnumerateFiles(dir, "*.json")
+                                        |> Seq.map Path.GetFileNameWithoutExtension
+                                    let samplesString =
+                                        let str = String.Join(", ", samples)
+                                        $"[{str}]"
+                                    failwith $"Sample {path} does not exist. Available samples are: {samplesString}"
+                                else
+                                    failwith $"Samples directory '{dir}' does not exist"
+                                
                     log.Verbose("Read and deserialize inputs from {path}", path)
                     path
                     |> File.ReadAllText
