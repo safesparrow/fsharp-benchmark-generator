@@ -1,5 +1,7 @@
 # FCSBenchmark.Generator
 
+![GitHub Workflow Status](https://img.shields.io/github/workflow/status/safesparrow/fsharp-benchmark-generator/.NET)
+
 ## What is it
 A command-line app for generating and running benchmarks of FCS using high-level analysis definitions
 
