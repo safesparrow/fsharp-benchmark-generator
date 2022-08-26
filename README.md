@@ -56,10 +56,16 @@ graph TD;
         H-->K
     end
 ```
-## How to use it
-Below command runs `Benchmark.Generator` and tests the analysis of the [Fantomas](https://github.com/fsprojects/fantomas) project using 3 different FCS versions: 
+## Installation
+Benchmark can be installed as a dotnet global tool using the following command:
 ```bash
-dotnet run -c Release --project ./FCSBenchmark.Generator.fsproj -- -i .\inputs\fantomas.json --official 41.0.5 41.0.2 --local c:\projekty\fsharp\fsharp_main -n 1 
+dotnet tool install --global FCSBenchmark --prerelease
+```
+Then run using the `fcs-benchmark` executable.
+## How to use it
+Below command runs `FCSBenchmark.Generator` and tests the analysis of the [Fantomas](https://github.com/fsprojects/fantomas) project using 3 different FCS versions: 
+```bash
+fcs-benchmark -i .\inputs\fantomas.json --official 41.0.5 41.0.2 --local c:\projekty\fsharp\fsharp_main -n 1 
 ```
 Let's deconstruct it:
 - `dotnet run -c Release --project ./FCSBenchmark.Generator.fsproj` - boilerplate required to start the program
