@@ -158,6 +158,8 @@ type RunnerArgs =
         Iterations : int
         [<Option("warmups", Required = false, Default = 1, HelpText = "Number of warmups")>]
         Warmups : int
+        [<Option("artifacts-path", Required = false, HelpText = "BDN Artifacts output path")>]
+        ArtifactsPath : string
     }
 
 let private makeConfig (versions : NuGetFCSVersion list) (args : RunnerArgs) : IConfig =
@@ -178,7 +180,13 @@ let private makeConfig (versions : NuGetFCSVersion list) (args : RunnerArgs) : I
         )
     
     let d = DefaultConfig.Instance
-    let config = ManualConfig.CreateEmpty()
+    let defaultArtifactsPath = Path.Combine(Environment.CurrentDirectory, "FCSBenchmark.Artifacts")
+    let artifactsPath =
+        args.ArtifactsPath
+        |> Option.ofObj
+        |> Option.defaultValue defaultArtifactsPath
+    let config =
+        ManualConfig.CreateEmpty().WithArtifactsPath(artifactsPath)
     let config = config.AddLogger(BenchmarkDotNet.Loggers.NullLogger.Instance)
     let config = config.AddExporter(d.GetExporters() |> Seq.toArray)
     let config = config.AddAnalyser(d.GetAnalysers() |> Seq.toArray)
