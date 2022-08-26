@@ -63,9 +63,15 @@ dotnet tool install --global FCSBenchmark --prerelease
 ```
 Then run using the `fcs-benchmark` executable.
 ## How to use it
-Below command runs `FCSBenchmark.Generator` and tests the analysis of the [Fantomas](https://github.com/fsprojects/fantomas) project using 3 different FCS versions: 
+To run a benchmark you need a benchmark definition.
+Sample definitions can be found in `inputs/`.
+As an example, you can download a [Fantomas](https://github.com/fsprojects/fantomas) benchmark - `inputs/fantomas.json` - using the following PowerShell command:
+```powershell
+Invoke-WebRequest -Uri https://raw.githubusercontent.com/safesparrow/fsharp-benchmark-generator/main/inputs/fantomas.json -OutFile input_fantomas.json
+```
+Below command runs `FCSBenchmark.Generator` against the above definition using 3 different FCS versions: 
 ```bash
-fcs-benchmark -i .\inputs\fantomas.json --official 41.0.5 41.0.2 --local c:\projekty\fsharp\fsharp_main -n 1 
+fcs-benchmark -i input_fantomas.json --official 41.0.5 41.0.2 --local c:\projekty\fsharp\fsharp_main -n 1 
 ```
 Let's deconstruct it:
 - `dotnet run -c Release --project ./FCSBenchmark.Generator.fsproj` - boilerplate required to start the program
