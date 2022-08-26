@@ -380,10 +380,12 @@ module Generate =
             Warmups : int
             [<CommandLine.Option('v', "verbose", Default = false, HelpText = "Verbose logging. Includes output of all preparation steps.")>]
             Verbose : bool
-            [<Option("official", Required = false, HelpText = "A list of publically available FCS NuGet versions to test.")>]
+            [<Option("official", Required = false, HelpText = "A publicly available FCS NuGet version to test. Supports multiple values.")>]
             OfficialVersions : string seq
-            [<Option("local", Required = false, HelpText = "A list of local NuGet sources to use for testing locally-generated FCS nupkg files.")>]
+            [<Option("local", Required = false, HelpText = "A local NuGet source to use for testing locally-generated FCS nupkg files. Supports multiple values.")>]
             LocalNuGetSourceDirs : string seq
+            [<Option("github", Required = false, HelpText = "An FSharp repository&revision, in the form 'owner/repo/revision' eg. 'dotnet/fsharp/5a72e586278150b7aea4881829cd37be872b2043. Supports multiple values.")>]
+            GitHubVersions : string seq
         }
     
     let run (args : Args) =
