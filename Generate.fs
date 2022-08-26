@@ -297,6 +297,23 @@ module Generate =
         | NuGetFCSVersion.Official version -> $"--official={version}"
         | NuGetFCSVersion.Local sourceDir -> $"--local=\"{sourceDir}\""
     
+    let rec copyRunnerProjectFilesToTemp (sourceDir : string) =
+        let buildDir =
+            let file = Path.GetTempFileName()
+            File.Delete(file)
+            Path.Combine(Path.GetDirectoryName(file), Path.GetFileNameWithoutExtension(file))
+        Directory.CreateDirectory(buildDir) |> ignore
+        Directory.EnumerateFiles(sourceDir)
+        |> Seq.iter (fun sourceFile ->
+            File.Copy(sourceFile, Path.Combine(buildDir, Path.GetFileName(sourceFile)))
+        )
+        try
+            buildDir
+        with _ ->
+            Directory.Delete(buildDir, recursive = true)
+            reraise()
+        
+    
     let private prepareAndRun (config : Config) (case : BenchmarkCase) (dryRun : bool) (cleanup : bool) (iterations : int) (warmups : int) (versions : NuGetFCSVersion list) =
         let codebase = prepareCodebase config case
         let inputs = generateInputs case codebase.Path
@@ -309,9 +326,9 @@ module Generate =
         if dryRun = false then
             use _ = LogContext.PushProperty("step", "Run")
             let workingDir = Path.Combine(Path.GetDirectoryName(Assembly.GetAssembly(typeof<RepoSetup.RepoSpec>).Location), "FCSBenchmark.Runner")
+            let workingDir = copyRunnerProjectFilesToTemp workingDir
             let envVariables = emptyProjInfoEnvironmentVariables()
-            let bdnArtifactsDir = Path.Combine(workingDir, "BenchmarkDotNet.Artifacts")
-            let benchmarkClass = "FCSBenchmark.Runner.FCSBenchmark"
+            let bdnArtifactsDir = Path.Combine(Environment.CurrentDirectory, "BenchmarkDotNet.Artifacts")
             let exe = "dotnet"
             let versionsArgs =
                 let o =
@@ -327,7 +344,8 @@ module Generate =
                     | [] -> ""
                     | locals -> "--local " + String.Join(" ", locals)
                 o + " " + l
-            let args = $"run -c Release -- --input={inputsPath} --iterations={iterations} --warmups={warmups} {versionsArgs}".Trim()
+            let artifactsPath = Path.Combine(Environment.CurrentDirectory, "FCSBenchmark.Artifacts")
+            let args = $"run -c Release -- --artifacts-path={artifactsPath} --input={inputsPath} --iterations={iterations} --warmups={warmups} {versionsArgs}".Trim()
             log.Information(
                 "Starting the benchmark:\n\
                  - Full BDN output can be found in {artifactFiles}.\n\

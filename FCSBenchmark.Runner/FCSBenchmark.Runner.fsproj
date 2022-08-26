@@ -10,8 +10,8 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <Compile Include="..\Dtos.fs">
-          <Link>Dtos.fs</Link>
+        <Compile Include="Dtos.fs">
+          <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </Compile>
         <Compile Include="Runner.fs" />
     </ItemGroup>
