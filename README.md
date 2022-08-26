@@ -63,26 +63,28 @@ dotnet tool install --global FCSBenchmark --prerelease
 ```
 Then run using the `fcs-benchmark` executable.
 ## How to use it
-To run a benchmark you need a benchmark definition.
-Sample definitions can be found in `inputs/`.
-As an example, you can download a [Fantomas](https://github.com/fsprojects/fantomas) benchmark - `inputs/fantomas.json` - using the following PowerShell command:
-```powershell
-Invoke-WebRequest -Uri https://raw.githubusercontent.com/safesparrow/fsharp-benchmark-generator/main/inputs/fantomas.json -OutFile input_fantomas.json
-```
-Below command runs `FCSBenchmark.Generator` against the above definition using 3 different FCS versions: 
+Below command runs one of the sample benchmarks using 3 different FCS versions: 
 ```bash
-fcs-benchmark -i input_fantomas.json --official 41.0.5 41.0.2 --local c:\projekty\fsharp\fsharp_main -n 1 
+fcs-benchmark --sample fantomas --official 41.0.5 41.0.2 --local c:\projekty\fsharp\fsharp_main -w 1 -n 2 
 ```
 Let's deconstruct it:
-- `dotnet run -c Release --project ./FCSBenchmark.Generator.fsproj` - boilerplate required to start the program
-- ` -- ` - indicates that the following arguments should be forwarded to the app rather than consumed by `dotnet`
-- `-i .\inputs\fantomas.json` - points to a benchmark definition
+- `fcs-benchmark` - run the dotnet tool
+- `--sample fantomas` - use the 'fantomas' sample benchmark - see [fantomas.json](https://raw.githubusercontent.com/safesparrow/fsharp-benchmark-generator/main/inputs/fantomas.json)
 - `--official 41.0.5 41.0.2` - specifies two FCS versions to be, available on public NuGet feed
 - `--local c:\projekty\fsharp\fsharp_main` - specifies one local version of FCS to use, by pointing to a repository root - this assumes FCS has been packed using `./build.cmd -pack ...` command
-For more CLI options use `dotnet run --help`
+- `-w 1` - run 1 warmup iteration
+- `-n 2` - run 2 main iterations
+
+### Using a custom benchmark file
+To use a custom benchmark rather than one of the samples, use the `--input` (`-i`) argument:
+```bash
+fcs-benchmark -i input_fantomas.json --official 41.0.5
+```
+
+For more CLI options see `dotnet run --help`
 
 <details>
-<summary>Sample output:</summary>
+<summary>Sample output from the `fantomas` sample benchmark</summary>
 
 ```bash
 [23:55:02 INF] PrepareCodebase: Preparing repo fantomas (https://github.com/fsprojects/fantomas) @ 0fe6785076e045f28e4c88e6a57dd09b649ce671
