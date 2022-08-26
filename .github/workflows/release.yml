@@ -14,6 +14,6 @@ jobs:
     - name: Setup .NET
       uses: actions/setup-dotnet@v2
     - name: Build
-      run: dotnet build -c Release
+      run: dotnet build -c Release FCSBenchmark.sln
     - name: Push to NuGet
       run: dotnet nuget push "nupkg/*.nupkg" --api-key ${{secrets.NUGET_KEY}} --source https://api.nuget.org/v3/index.json
