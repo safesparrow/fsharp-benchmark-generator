@@ -48,9 +48,9 @@
         <Compile Include="Utils.fs" />
         <Compile Include="Dtos.fs" />
         <Compile Include="RunConfig.fs" />
-        <Compile Include="Build.fs" />
         <Compile Include="Git.fs" />
         <Compile Include="RepoSetup.fs" />
+        <Compile Include="FCSCheckouts.fs" />
         <Compile Include="Generate.fs" />
     </ItemGroup>
 

@@ -12,7 +12,7 @@ type RepoSpec =
         Revision : string
     }
     with override this.ToString() = $"{this.Name} ({this.GitUrl}) @ {this.Revision}"
-    
+
 type Config =
     {
         BaseDir : string
@@ -29,5 +29,5 @@ let prepare (config : Config) (spec : RepoSpec) =
         Git.checkout repo spec.Revision
         repo
     else
-        log.Information("{dir} already exists - will assume the correct repository is already checked out", dir)
+        log.Information("{dir} already exists and is a git repository - will assume the repository revision is already checked out", dir)
         new Repository(dir)
