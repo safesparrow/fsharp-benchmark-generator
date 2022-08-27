@@ -62,7 +62,7 @@ let prepareCodebase (config : Config) (case : BenchmarkCase) : Codebase =
         match (case.Repo :> obj, case.LocalCodeRoot) with
         | null, null -> failwith "Either git repo or local code root details are required"
         | _, null ->
-            let repo = prepareRepo {BaseDir = config.BaseDir} case.Repo
+            let repo = prepareRepo config case.Repo
             Codebase.Git repo
         | null, codeRoot ->
             Codebase.Local codeRoot
@@ -198,13 +198,6 @@ let private readJsonResultsSummary (bdnArtifactsDir : string) (benchmarkClass : 
     let jObject = JsonConvert.DeserializeObject<JObject>(json)
     extractResultsFromJson jObject
 
-let private makeVersionArg (version : NuGetFCSVersion) =
-    match version with
-    | NuGetFCSVersion.Official version -> $"--official={version}"
-    | NuGetFCSVersion.Local sourceDir ->
-        let sourceDir = sourceDir.TrimEnd([|'\\'; '/'|])
-        $"--local=\"{sourceDir}\""
-
 let rec copyRunnerProjectFilesToTemp (sourceDir : string) =
     let buildDir =
         let file = Path.GetTempFileName()
@@ -250,7 +243,8 @@ let private prepareAndRun (config : Config) (case : BenchmarkCase) (dryRun : boo
                 |> List.choose (function NuGetFCSVersion.Local v -> Some v | _ -> None)
                 |> function
                 | [] -> ""
-                | locals -> "--local " + String.Join(" ", locals)
+                | locals ->
+                    "--local " + String.Join(" ", locals |> List.map (fun local -> local.TrimEnd([|'\\'; '/'|])))
             o + " " + l
         let artifactsPath = Path.Combine(Environment.CurrentDirectory, "FCSBenchmark.Artifacts")
         let args = $"run -c Release -- --artifacts-path={artifactsPath} --input={inputsPath} --iterations={iterations} --warmups={warmups} {versionsArgs}".Trim()
@@ -274,6 +268,8 @@ type Args =
     {
         [<CommandLine.Option('c', "checkouts", Default = ".artifacts", HelpText = "Base directory for git checkouts")>]
         CheckoutsDir : string
+        [<CommandLine.Option("forceFcsBuild", Default = false, HelpText = "Force build git-sourced FCS versions even if the binaries already exist")>]
+        ForceFCSBuild : bool
         [<CommandLine.Option('i', SetName = "input", HelpText = "Path to the input file describing the benchmark")>]
         Input : string
         [<CommandLine.Option("sample", SetName = "input", HelpText = "Use a predefined sample benchmark with the given name")>]
@@ -343,7 +339,7 @@ let prepareCase (args : Args) : BenchmarkCase =
         log.Fatal(msg)
         reraise()
 
-let prepareFCSVersions (config : RepoSetup.Config) (raw : FCSVersionsArgs) =
+let prepareFCSVersions (config : Config) (raw : FCSVersionsArgs) =
     let official = raw.Official |> List.map NuGetFCSVersion.Official
     let local = raw.Local |> List.map NuGetFCSVersion.Local
     let git =
@@ -375,6 +371,7 @@ let run (args : Args) : unit =
         let config =
             {
                 Config.BaseDir = args.CheckoutsDir
+                Config.ForceFCSBuild = args.ForceFCSBuild
             }
         
         let rawVersions = { Official = args.OfficialVersions |> Seq.toList; Local = args.LocalNuGetSourceDirs |> Seq.toList; Git = args.GitHubVersions |> Seq.toList }

@@ -45,9 +45,19 @@ let private fcsDllPath (checkoutDir : string) =
 let checkoutContainsBuiltFcs (checkoutDir : string) =
     File.Exists(fcsDllPath checkoutDir)
 
-let buildAndPackFCS (repoRootDir : string) : unit =
-    log.Information($"Building and packing FCS in {repoRootDir}")
-    Utils.runProcess "cmd" $"/C build.cmd -c Release -pack -noVisualStudio" repoRootDir [] LogEventLevel.Verbose
+let buildAndPackFCS (repoRootDir : string) (forceFCSBuild : bool) : unit =
+    let packagesDir = Path.Combine(repoRootDir, "artifacts", "packages", "Release", "Release")
+    let fcsPackages = Directory.EnumerateFiles(packagesDir, "FSharp.Compiler.Service.*.nupkg") |> Seq.toList
+    let build () =
+        log.Information("Building and packing FCS in {repo}.", repoRootDir)
+        Utils.runProcess "cmd" $"/C build.cmd -c Release -pack -noVisualStudio" repoRootDir [] LogEventLevel.Verbose
+    match fcsPackages, forceFCSBuild with
+    | [], _ ->
+        build ()
+    | _, false ->
+        log.Information("FCS nupkg file exists in {repo} codebase - not building again.", repoRootDir)
+    | _, true ->
+        log.Information("FCS nupkg file exists in {repo} codebase, but forceFCSBuild was set.", repoRootDir)
 
 type FCSCheckout =
     {
@@ -62,7 +72,7 @@ type FCSCheckout =
 let checkoutAndBuild (config : Config) (fcsSpec : FCSRepoSpec) : FCSCheckout =
     let spec = FCSRepoSpec.toFullSpec fcsSpec
     let repo = prepareRepo config spec
-    buildAndPackFCS repo.Info.WorkingDirectory
+    buildAndPackFCS repo.Info.WorkingDirectory config.ForceFCSBuild
     {
         Spec = fcsSpec
         Repo = repo

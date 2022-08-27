@@ -16,6 +16,7 @@ type RepoSpec =
 type Config =
     {
         BaseDir : string
+        ForceFCSBuild : bool
     }
 
 let revisionDir (config : Config) (spec : RepoSpec) : string =
