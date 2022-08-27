@@ -201,7 +201,9 @@ let private readJsonResultsSummary (bdnArtifactsDir : string) (benchmarkClass : 
 let private makeVersionArg (version : NuGetFCSVersion) =
     match version with
     | NuGetFCSVersion.Official version -> $"--official={version}"
-    | NuGetFCSVersion.Local sourceDir -> $"--local=\"{sourceDir}\""
+    | NuGetFCSVersion.Local sourceDir ->
+        let sourceDir = sourceDir.TrimEnd([|'\\'; '/'|])
+        $"--local=\"{sourceDir}\""
 
 let rec copyRunnerProjectFilesToTemp (sourceDir : string) =
     let buildDir =
@@ -270,7 +272,7 @@ let private prepareAndRun (config : Config) (case : BenchmarkCase) (dryRun : boo
 
 type Args =
     {
-        [<CommandLine.Option('c', Default = ".artifacts", HelpText = "Base directory for git checkouts")>]
+        [<CommandLine.Option('c', "checkouts", Default = ".artifacts", HelpText = "Base directory for git checkouts")>]
         CheckoutsDir : string
         [<CommandLine.Option('i', SetName = "input", HelpText = "Path to the input file describing the benchmark")>]
         Input : string
