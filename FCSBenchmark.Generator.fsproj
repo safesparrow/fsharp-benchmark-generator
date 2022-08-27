@@ -6,7 +6,7 @@
         <OutputType>exe</OutputType>
         <RunWorkingDirectory>$(MSBuildProjectDirectory)</RunWorkingDirectory>
         <Description>A tool for generating and running high-level benchmarks of the FSharp compiler service (FCS)</Description>
-        <RootNamespace>FCSBenchmark.Generator</RootNamespace>
+        <RootNamespace>FCSBenchmark.Generator2</RootNamespace>
         <NoWarn>NU1608</NoWarn>
 
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
@@ -37,9 +37,7 @@
     
     <ItemGroup>
         <!-- Copied for use in FCSBenchmark.Runner -->
-        <None Include="FCSBenchmark.Runner\Dtos.fs" CopyToOutputDirectory="PreserveNewest" />
-        <None Include="FCSBenchmark.Runner\Runner.fs" CopyToOutputDirectory="PreserveNewest" />
-        <None Include="FCSBenchmark.Runner\FCSBenchmark.Runner.fsproj" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="FCSBenchmark.Runner\*.*" CopyToOutputDirectory="PreserveNewest" />
         <None Include="inputs/*.json" CopyToOutputDirectory="PreserveNewest" />
         <None Include=".gitignore" />
         <None Include="README.md" />
@@ -47,7 +45,6 @@
         <Compile Include="Log.fs" />
         <Compile Include="Utils.fs" />
         <Compile Include="Dtos.fs" />
-        <Compile Include="RunConfig.fs" />
         <Compile Include="Git.fs" />
         <Compile Include="RepoSetup.fs" />
         <Compile Include="FCSCheckouts.fs" />

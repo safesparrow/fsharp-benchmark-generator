@@ -18,10 +18,10 @@ type Config =
         BaseDir : string
     }
 
-let revisionDir (config : Config) (spec : RepoSpec) =
+let revisionDir (config : Config) (spec : RepoSpec) : string =
     Path.Combine(config.BaseDir, spec.Name, spec.Revision)
 
-let prepare (config : Config) (spec : RepoSpec) =
+let prepareRepo (config : Config) (spec : RepoSpec) : Repository =
     log.Information("Preparing repo {spec}", spec)
     let dir = revisionDir config spec
     if Repository.IsValid dir |> not then

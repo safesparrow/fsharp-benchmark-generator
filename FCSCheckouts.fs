@@ -2,6 +2,7 @@
 module FCSBenchmark.Generator.FCSCheckouts
 
 open System.IO
+open FCSBenchmark.Common.Dtos
 open FCSBenchmark.Generator.RepoSetup
 open LibGit2Sharp
 open Serilog.Events
@@ -60,9 +61,29 @@ type FCSCheckout =
         
 let checkoutAndBuild (config : Config) (fcsSpec : FCSRepoSpec) : FCSCheckout =
     let spec = FCSRepoSpec.toFullSpec fcsSpec
-    let repo = prepare config spec
+    let repo = prepareRepo config spec
     buildAndPackFCS repo.Info.WorkingDirectory
     {
         Spec = fcsSpec
         Repo = repo
     }
+    
+type NuGetVersion = NuGetVersion of string
+
+[<RequireQualifiedAccess>]
+type FCSVersion =
+    | OfficialNuGet of NuGetVersion
+    | Local of DirectoryInfo // Root directory or package directory
+    | Git of FCSRepoSpec
+    
+let prepareFCSVersions (config : Config) (versions : FCSVersion list) : NuGetFCSVersion list =
+    versions
+    |> List.map (
+        function
+            | FCSVersion.OfficialNuGet (NuGetVersion version) -> NuGetFCSVersion.Official version
+            | FCSVersion.Local root -> NuGetFCSVersion.Local root.FullName
+            | FCSVersion.Git spec ->
+                let checkout = checkoutAndBuild config spec
+                NuGetFCSVersion.Local checkout.Dir
+            
+    )

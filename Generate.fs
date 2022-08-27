@@ -4,8 +4,11 @@ open System
 open System.IO
 open System.Reflection
 open System.Runtime.CompilerServices
+open System.Text.RegularExpressions
 open FCSBenchmark.Common.Dtos
 open CommandLine
+open FCSBenchmark.Generator.FCSCheckouts
+open FCSBenchmark.Generator.RepoSetup
 open FSharp.Compiler.CodeAnalysis
 open Ionide.ProjInfo
 open Ionide.ProjInfo.Types
@@ -48,11 +51,6 @@ let init (slnPath : string) =
     log.Verbose("Calling {method} for directory {directory}", "Ionide.ProjInfo.Init.init", directoryName)
     Init.init (DirectoryInfo(directoryName)) None
 
-type Config =
-    {
-        CheckoutBaseDir : string
-    }
-
 type Codebase =
     | Local of string
     | Git of LibGit2Sharp.Repository
@@ -64,7 +62,7 @@ let prepareCodebase (config : Config) (case : BenchmarkCase) : Codebase =
         match (case.Repo :> obj, case.LocalCodeRoot) with
         | null, null -> failwith "Either git repo or local code root details are required"
         | _, null ->
-            let repo = RepoSetup.prepare {BaseDir = config.CheckoutBaseDir} case.Repo
+            let repo = prepareRepo {BaseDir = config.BaseDir} case.Repo
             Codebase.Git repo
         | null, codeRoot ->
             Codebase.Local codeRoot
@@ -296,75 +294,92 @@ type Args =
         GitHubVersions : string seq
     }
 
-type NuGetVersion = NuGetVersion of string
+let prepareCase (args : Args) : BenchmarkCase =
+    use _ = LogContext.PushProperty("step", "Read input")
+    try
+        let path =
+            match args.Input |> Option.ofObj, args.SampleInput |> Option.ofObj with
+            | None, None -> failwith $"No input specified"
+            | Some input, _ -> input
+            | None, Some sample ->
+                let assemblyDir = Path.GetDirectoryName(Assembly.GetAssembly(typeof<Args>).Location)
+                let path = Path.Combine(assemblyDir, "inputs", $"{sample}.json")
+                if File.Exists(path) then path
+                else
+                    let dir = Path.GetDirectoryName(path)
+                    if Directory.Exists(dir) then
+                        let samples =
+                            Directory.EnumerateFiles(dir, "*.json")
+                            |> Seq.map Path.GetFileNameWithoutExtension
+                        let samplesString =
+                            let str = String.Join(", ", samples)
+                            $"[{str}]"
+                        failwith $"Sample {path} does not exist. Available samples are: {samplesString}"
+                    else
+                        failwith $"Samples directory '{dir}' does not exist"
+                    
+        log.Verbose("Read and deserialize inputs from {path}", path)
+        path
+        |> File.ReadAllText
+        |> JsonConvert.DeserializeObject<BenchmarkCase>
+        |> fun case ->
+                let defaultCodebasePrep =
+                    [
+                        {
+                            CodebasePrepStep.Command = "dotnet"
+                            CodebasePrepStep.Args = $"restore {case.SlnRelative}"
+                        }
+                    ]
+                let codebasePrep =
+                    match obj.ReferenceEquals(case.CodebasePrep, null) with
+                    | true -> defaultCodebasePrep
+                    | false -> case.CodebasePrep
+                
+                { case with CodebasePrep = codebasePrep }
+    with e ->
+        let msg = $"Failed to read inputs file: {e.Message}"
+        log.Fatal(msg)
+        reraise()
 
-[<RequireQualifiedAccess>]
-type FCSVersion =
-    | OfficialNuGet of NuGetVersion
-    | Local of DirectoryInfo // Root directory or package directory
-    | Git of string
+let prepareFCSVersions (config : RepoSetup.Config) (raw : FCSVersionsArgs) =
+    let official = raw.Official |> List.map NuGetFCSVersion.Official
+    let local = raw.Local |> List.map NuGetFCSVersion.Local
+    let git =
+        raw.Git
+        |> List.map (fun specStr ->
+            let m = Regex.Match(specStr, "^([0-9a-zA-Z_\-]+)/([0-9a-zA-Z_\-]+)/([0-9a-zA-Z_\-]+)$")
+            if m.Success then
+                let owner, repo, revision = m.Groups[1].Value, m.Groups[2].Value, m.Groups[3].Value
+                let url = $"https://github.com/{owner}/{repo}"
+                let spec = FCSRepoSpec.Custom {GitUrl = url; Revision = revision}
+                let checkout = checkoutAndBuild config spec
+                NuGetFCSVersion.Local checkout.Dir
+            else
+                failwith $"Invalid GitHub FCS repo spec: {specStr}. Expected format: 'owner/repo/revision'"
+        )
+    local @ official @ git
+    |> function
+        | [] -> failwith "At least one version must be specified"
+        | versions -> versions
 
-let run (args : Args) =
-    log <-LoggerConfiguration().Enrich.FromLogContext()
-                .WriteTo.Console(outputTemplate = "[{Timestamp:HH:mm:ss} {Level:u3}] {step:j}: {Message:lj}{NewLine}{Exception}")
-                .MinimumLevel.Is(if args.Verbose then LogEventLevel.Verbose else LogEventLevel.Information)
-                .CreateLogger()
+
+let run (args : Args) : unit =
+    log <- LoggerConfiguration().Enrich.FromLogContext()
+               .WriteTo.Console(outputTemplate = "[{Timestamp:HH:mm:ss} {Level:u3}] {step:j}: {Message:lj}{NewLine}{Exception}")
+               .MinimumLevel.Is(if args.Verbose then LogEventLevel.Verbose else LogEventLevel.Information)
+               .CreateLogger()
     try
         log.Verbose("CLI args provided:" + Environment.NewLine + "{args}", args)
-        
         let config =
             {
-                Config.CheckoutBaseDir = args.CheckoutsDir
+                Config.BaseDir = args.CheckoutsDir
             }
-        let case =
-            use _ = LogContext.PushProperty("step", "Read input")
-            try
-                let path =
-                    match args.Input |> Option.ofObj, args.SampleInput |> Option.ofObj with
-                    | None, None -> failwith $"No input specified"
-                    | Some input, _ -> input
-                    | None, Some sample ->
-                        let assemblyDir = Path.GetDirectoryName(Assembly.GetAssembly(typeof<Args>).Location)
-                        let path = Path.Combine(assemblyDir, "inputs", $"{sample}.json")
-                        if File.Exists(path) then path
-                        else
-                            let dir = Path.GetDirectoryName(path)
-                            if Directory.Exists(dir) then
-                                let samples =
-                                    Directory.EnumerateFiles(dir, "*.json")
-                                    |> Seq.map Path.GetFileNameWithoutExtension
-                                let samplesString =
-                                    let str = String.Join(", ", samples)
-                                    $"[{str}]"
-                                failwith $"Sample {path} does not exist. Available samples are: {samplesString}"
-                            else
-                                failwith $"Samples directory '{dir}' does not exist"
-                            
-                log.Verbose("Read and deserialize inputs from {path}", path)
-                path
-                |> File.ReadAllText
-                |> JsonConvert.DeserializeObject<BenchmarkCase>
-                |> fun case ->
-                        let defaultCodebasePrep =
-                            [
-                                {
-                                    CodebasePrepStep.Command = "dotnet"
-                                    CodebasePrepStep.Args = $"restore {case.SlnRelative}"
-                                }
-                            ]
-                        let codebasePrep =
-                            match obj.ReferenceEquals(case.CodebasePrep, null) with
-                            | true -> defaultCodebasePrep
-                            | false -> case.CodebasePrep
-                        
-                        { case with CodebasePrep = codebasePrep }
-            with e ->
-                let msg = $"Failed to read inputs file: {e.Message}"
-                log.Fatal(msg)
-                reraise()
+        
+        let rawVersions = { Official = args.OfficialVersions |> Seq.toList; Local = args.LocalNuGetSourceDirs |> Seq.toList; Git = args.GitHubVersions |> Seq.toList }
+        let versions = prepareFCSVersions config rawVersions
+        let case = prepareCase args
         
         use _ = LogContext.PushProperty("step", "PrepareAndRun")
-        let versions = parseVersions args.OfficialVersions args.LocalNuGetSourceDirs
         prepareAndRun config case args.DryRun args.Cleanup args.Iterations args.Warmups versions
     with ex ->
         if args.Verbose then

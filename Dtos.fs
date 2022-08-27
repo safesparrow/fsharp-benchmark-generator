@@ -9,6 +9,7 @@ open System
 open System.Collections.Generic
 open System.ComponentModel
 open System.Runtime.CompilerServices
+open System.Text.RegularExpressions
 open Microsoft.FSharp.Reflection
 open FSharp.Compiler.CodeAnalysis
 open Newtonsoft.Json
@@ -223,12 +224,16 @@ let deserializeInputs (json : string) : BenchmarkInputs =
 type NuGetFCSVersion =
     | Official of version : string
     | Local of sourceDir : string
-    
+
+type FCSVersionsArgs =
+    {
+        Official : string list
+        Local : string list
+        Git : string list
+    }    
+
 let parseVersions (officialVersions : string seq) (localNuGetSourceDirs : string seq) =
     let official = officialVersions |> Seq.map NuGetFCSVersion.Official
     let local = localNuGetSourceDirs |> Seq.map NuGetFCSVersion.Local
     Seq.append official local
     |> Seq.toList
-    |> function
-        | [] -> failwith "At least one version must be specified"
-        | versions -> versions
