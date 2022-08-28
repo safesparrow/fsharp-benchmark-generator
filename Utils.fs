@@ -1,6 +1,7 @@
 ﻿/// General utilities
 module FCSBenchmark.Generator.Utils
 
+open System.Collections.Generic
 open System.Diagnostics
 open Serilog.Events
     
@@ -21,7 +22,11 @@ let runProcess name args workingDir (envVariables : (string * string) list) (out
     log.Verbose("Running '{name} {args}' in '{workingDir}'", name, args, workingDir)
     let p = new Process(StartInfo = info)
     p.EnableRaisingEvents <- true
-    p.OutputDataReceived.Add(fun args -> log.Write(outputLogLevel, args.Data))
+    let output = List<string>()
+    p.OutputDataReceived.Add(fun args ->
+        log.Write(outputLogLevel, args.Data)
+        output.Add(args.Data)
+    )
     p.ErrorDataReceived.Add(fun args -> log.Error(args.Data))
     p.Start() |> ignore
     p.BeginErrorReadLine()
@@ -29,5 +34,11 @@ let runProcess name args workingDir (envVariables : (string * string) list) (out
     p.WaitForExit()
     
     if p.ExitCode <> 0 then
-        log.Error("Process '{name} {args}' failed - check full process output above.", name, args)
+        if log.IsEnabled(outputLogLevel) then
+            log.Error("Process '{name} {args}' failed - check full process output above.", name, args)
+        else
+            log.Error($"Process '{name} {args}' failed - printing its full output.", name, args)
+            output
+            |> Seq.iter log.Error
+                
         failwith $"Process {name} {args} failed - check full process output above."

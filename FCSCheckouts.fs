@@ -53,12 +53,14 @@ let buildAndPackFCS (repoRootDir : string) (forceFCSBuild : bool) : unit =
             | [] -> false
             | _ -> true
         else
+            log.Information($"PackagesDir {packagesDir} DOES NOT exist")
             false
     let build () =
         log.Information("Building and packing FCS in {repo}.", repoRootDir)
         Utils.runProcess "cmd" $"/C build.cmd -c Release -pack -noVisualStudio" repoRootDir [] LogEventLevel.Verbose
     match packagesExist, forceFCSBuild with
     | false, _ ->
+        log.Information($"packages don't exist - building")
         build ()
     | true, false ->
         log.Information("FCS nupkg file exists in {repo} codebase - not building again.", repoRootDir)
