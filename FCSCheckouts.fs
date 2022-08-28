@@ -47,17 +47,24 @@ let checkoutContainsBuiltFcs (checkoutDir : string) =
 
 let buildAndPackFCS (repoRootDir : string) (forceFCSBuild : bool) : unit =
     let packagesDir = Path.Combine(repoRootDir, "artifacts", "packages", "Release", "Release")
-    let fcsPackages = Directory.EnumerateFiles(packagesDir, "FSharp.Compiler.Service.*.nupkg") |> Seq.toList
+    let packagesExist =
+        if Directory.Exists(packagesDir) then
+            match Directory.EnumerateFiles(packagesDir, "FSharp.Compiler.Service.*.nupkg") |> Seq.toList with
+            | [] -> false
+            | _ -> true
+        else
+            false
     let build () =
         log.Information("Building and packing FCS in {repo}.", repoRootDir)
         Utils.runProcess "cmd" $"/C build.cmd -c Release -pack -noVisualStudio" repoRootDir [] LogEventLevel.Verbose
-    match fcsPackages, forceFCSBuild with
-    | [], _ ->
+    match packagesExist, forceFCSBuild with
+    | false, _ ->
         build ()
-    | _, false ->
+    | true, false ->
         log.Information("FCS nupkg file exists in {repo} codebase - not building again.", repoRootDir)
-    | _, true ->
+    | true, true ->
         log.Information("FCS nupkg file exists in {repo} codebase, but forceFCSBuild was set.", repoRootDir)
+        build ()
 
 type FCSCheckout =
     {

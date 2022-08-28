@@ -228,7 +228,7 @@ let private prepareAndRun (config : Config) (case : BenchmarkCase) (dryRun : boo
         use _ = LogContext.PushProperty("step", "Run")
         let workingDir = Path.Combine(Path.GetDirectoryName(Assembly.GetAssembly(typeof<RepoSetup.RepoSpec>).Location), "FCSBenchmark.Runner")
         let workingDir = copyRunnerProjectFilesToTemp workingDir
-        let envVariables = emptyProjInfoEnvironmentVariables()
+        let envVariables = emptyProjInfoEnvironmentVariables() @ ["DOTNET_ROOT_X64", ""]
         let bdnArtifactsDir = Path.Combine(Environment.CurrentDirectory, "BenchmarkDotNet.Artifacts")
         let exe = "dotnet"
         let versionsArgs =
