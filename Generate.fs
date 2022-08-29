@@ -205,12 +205,10 @@ let rec copyRunnerProjectFilesToTemp (sourceDir : string) =
         Path.Combine(Path.GetDirectoryName(file), Path.GetFileNameWithoutExtension(file))
     try
         Directory.CreateDirectory(buildDir) |> ignore
-        printfn $"Creating {buildDir}"
         for dirName in ["FCSBenchmark.Runner"; "FCSBenchmark.Serialisation"] do
             let sourceDir = Path.Combine(sourceDir, dirName)
             let targetDir = Path.Combine(buildDir, dirName)
             Directory.CreateDirectory(targetDir) |> ignore
-            printfn $"Copying {sourceDir} to {targetDir}"
             Directory.EnumerateFiles(sourceDir)
             |> Seq.iter (fun sourceFile ->
                 File.Copy(sourceFile, Path.Combine(targetDir, Path.GetFileName(sourceFile)))
