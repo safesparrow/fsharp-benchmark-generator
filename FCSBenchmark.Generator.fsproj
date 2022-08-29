@@ -38,6 +38,7 @@
     <ItemGroup>
         <!-- Copied for use in FCSBenchmark.Runner -->
         <None Include="FCSBenchmark.Runner\*.*" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="FCSBenchmark.Serialisation\*.*" CopyToOutputDirectory="PreserveNewest" />
         <None Include="inputs/*.json" CopyToOutputDirectory="PreserveNewest" />
         <None Include=".gitignore" />
         <None Include="README.md" />
