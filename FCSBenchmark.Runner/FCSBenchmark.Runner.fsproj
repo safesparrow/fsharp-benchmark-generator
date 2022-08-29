@@ -10,9 +10,6 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <Compile Include="Dtos.fs">
-          <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-        </Compile>
         <Compile Include="Runner.fs" />
     </ItemGroup>
 
@@ -26,6 +23,10 @@
       <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
       <PackageReference Include="NuGet.Client" Version="4.2.0" />
       <PackageReference Include="NuGet.Protocol" Version="6.3.0" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\FCSBenchmark.Serialisation\FCSBenchmark.Serialisation.fsproj" />
     </ItemGroup>
 
 </Project>

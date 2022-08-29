@@ -83,6 +83,11 @@ type Benchmark () =
         setup
         |> Option.iter (fun (checker, _) -> cleanCaches checker)
 
+[<RequireQualifiedAccess>]
+type NuGetFCSVersion =
+    | Official of version : string
+    | Local of sourceDir : string
+    
 module NuGet =
 
     let private fcsPackageName = "FSharp.Compiler.Service"
@@ -197,13 +202,24 @@ let private makeConfig (versions : NuGetFCSVersion list) (args : RunnerArgs) : I
     let config = List.fold (fun (config : IConfig) (job : Job) -> config.AddJob(job)) config jobs
     config
 
+let parseVersions (officialVersions : string seq) (localNuGetSourceDirs : string seq) =
+    let official = officialVersions |> Seq.map NuGetFCSVersion.Official
+    let local = localNuGetSourceDirs |> Seq.map NuGetFCSVersion.Local
+    Seq.append official local
+    |> Seq.toList
+
 [<EntryPoint>]
 let main args =
     use parser = new Parser(fun x -> x.IgnoreUnknownArguments <- false)
     let result = parser.ParseArguments<RunnerArgs>(args)
     match result with
     | :? Parsed<RunnerArgs> as parsed ->
-        let versions = parseVersions parsed.Value.OfficialVersions parsed.Value.LocalNuGetSourceDirs
+        let versions =
+            parseVersions parsed.Value.OfficialVersions parsed.Value.LocalNuGetSourceDirs
+            |> function
+                | [] -> failwith "At least one version must be specified"
+                | versions -> versions
+
         let defaultConfig = makeConfig versions parsed.Value
         let summary = BenchmarkRunner.Run(typeof<Benchmark>, defaultConfig)
         let analyser = summary.BenchmarksCases[0].Config.GetCompositeAnalyser()

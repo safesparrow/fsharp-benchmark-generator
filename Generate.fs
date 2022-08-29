@@ -203,13 +203,17 @@ let rec copyRunnerProjectFilesToTemp (sourceDir : string) =
         let file = Path.GetTempFileName()
         File.Delete(file)
         Path.Combine(Path.GetDirectoryName(file), Path.GetFileNameWithoutExtension(file))
-    Directory.CreateDirectory(buildDir) |> ignore
-    Directory.EnumerateFiles(sourceDir)
-    |> Seq.iter (fun sourceFile ->
-        File.Copy(sourceFile, Path.Combine(buildDir, Path.GetFileName(sourceFile)))
-    )
     try
-        buildDir
+        Directory.CreateDirectory(buildDir) |> ignore
+        for dirName in ["FCSBenchmark.Runner"; "FCSBenchmark.Serialisation"] do
+            let sourceDir = Path.Combine(sourceDir, dirName)
+            let targetDir = Path.Combine(buildDir, dirName)
+            Directory.CreateDirectory(targetDir) |> ignore
+            Directory.EnumerateFiles(sourceDir)
+            |> Seq.iter (fun sourceFile ->
+                File.Copy(sourceFile, Path.Combine(targetDir, Path.GetFileName(sourceFile)))
+            )
+        Path.Combine(buildDir, "FCSBenchmark.Runner")
     with _ ->
         Directory.Delete(buildDir, recursive = true)
         reraise()
@@ -226,7 +230,7 @@ let private prepareAndRun (config : Config) (case : BenchmarkCase) (dryRun : boo
     
     if dryRun = false then
         use _ = LogContext.PushProperty("step", "Run")
-        let workingDir = Path.Combine(Path.GetDirectoryName(Assembly.GetAssembly(typeof<RepoSetup.RepoSpec>).Location), "FCSBenchmark.Runner")
+        let workingDir = Path.GetDirectoryName(Assembly.GetAssembly(typeof<RepoSpec>).Location)
         let workingDir = copyRunnerProjectFilesToTemp workingDir
         let envVariables = emptyProjInfoEnvironmentVariables() @ ["DOTNET_ROOT_X64", ""]
         let bdnArtifactsDir = Path.Combine(Environment.CurrentDirectory, "BenchmarkDotNet.Artifacts")
@@ -338,6 +342,13 @@ let prepareCase (args : Args) : BenchmarkCase =
         let msg = $"Failed to read inputs file: {e.Message}"
         log.Fatal(msg)
         reraise()
+
+type FCSVersionsArgs =
+    {
+        Official : string list
+        Local : string list
+        Git : string list
+    }    
 
 let prepareFCSVersions (config : Config) (raw : FCSVersionsArgs) =
     let official = raw.Official |> List.map NuGetFCSVersion.Official

@@ -4,6 +4,8 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "FCSBenchmark.Generator", "F
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "FCSBenchmark.Runner", "FCSBenchmark.Runner\FCSBenchmark.Runner.fsproj", "{953A6E24-6770-4BBB-824D-8579A3C7B017}"
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "FCSBenchmark.Serialisation", "FCSBenchmark.Serialisation\FCSBenchmark.Serialisation.fsproj", "{0046E446-D4C2-40F9-BB9A-BF1321EC5D13}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -18,5 +20,9 @@ Global
 		{953A6E24-6770-4BBB-824D-8579A3C7B017}.Debug|Any CPU.Build.0 = Release|Any CPU
 		{953A6E24-6770-4BBB-824D-8579A3C7B017}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{953A6E24-6770-4BBB-824D-8579A3C7B017}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0046E446-D4C2-40F9-BB9A-BF1321EC5D13}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0046E446-D4C2-40F9-BB9A-BF1321EC5D13}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0046E446-D4C2-40F9-BB9A-BF1321EC5D13}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0046E446-D4C2-40F9-BB9A-BF1321EC5D13}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
