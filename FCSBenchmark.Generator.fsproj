@@ -44,11 +44,14 @@
         <Content Include="version.json" />
         <Compile Include="Log.fs" />
         <Compile Include="Utils.fs" />
-        <Compile Include="Dtos.fs" />
         <Compile Include="Git.fs" />
         <Compile Include="RepoSetup.fs" />
         <Compile Include="FCSCheckouts.fs" />
         <Compile Include="Generate.fs" />
+    </ItemGroup>
+    
+    <ItemGroup>
+      <ProjectReference Include="FCSBenchmark.Serialisation\FCSBenchmark.Serialisation.fsproj" />
     </ItemGroup>
 
 </Project>

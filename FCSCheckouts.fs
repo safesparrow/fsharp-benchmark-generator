@@ -95,6 +95,11 @@ type FCSVersion =
     | Local of DirectoryInfo // Root directory or package directory
     | Git of FCSRepoSpec
     
+[<RequireQualifiedAccess>]
+type NuGetFCSVersion =
+    | Official of version : string
+    | Local of sourceDir : string
+    
 let prepareFCSVersions (config : Config) (versions : FCSVersion list) : NuGetFCSVersion list =
     versions
     |> List.map (

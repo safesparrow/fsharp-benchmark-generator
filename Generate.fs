@@ -339,6 +339,13 @@ let prepareCase (args : Args) : BenchmarkCase =
         log.Fatal(msg)
         reraise()
 
+type FCSVersionsArgs =
+    {
+        Official : string list
+        Local : string list
+        Git : string list
+    }    
+
 let prepareFCSVersions (config : Config) (raw : FCSVersionsArgs) =
     let official = raw.Official |> List.map NuGetFCSVersion.Official
     let local = raw.Local |> List.map NuGetFCSVersion.Local
