@@ -22,6 +22,7 @@ type AnalyseFileDto =
 
 type BenchmarkActionDto =
     | AnalyseFile of AnalyseFileDto
+    | Analyse
 
 [<CLIMutable>]    
 type BenchmarkConfig =

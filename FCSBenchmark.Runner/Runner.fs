@@ -222,7 +222,6 @@ let main args =
     match result with
     | :? Parsed<RunnerArgs> as parsed ->
         
-        let b = Benchmark()
         Environment.SetEnvironmentVariable(Benchmark.InputEnvironmentVariable, parsed.Value.Input)
         
             
@@ -233,9 +232,10 @@ let main args =
             Sdk.CreateTracerProviderBuilder()
                .AddSource(activitySourceName)
                .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService(serviceName ="program", serviceVersion = "42.42.42.44"))
-               .AddOtlpExporter()
-               .AddZipkinExporter()
-               .Build();
+               // .AddOtlpExporter()
+               // .AddZipkinExporter()
+               .AddJaegerExporter()
+               .Build()
         use mainActivity = activitySource.StartActivity("main")
 
         let forceCleanup() =
@@ -243,12 +243,13 @@ let main args =
             activitySource.Dispose()
             tracerProvider.Dispose()
         
-        b.Setup()
-        b.Run()
-        forceCleanup()
+        for i in [1..10] do
+            let b = Benchmark()
+            b.Setup()
+            b.Run()
+            tracerProvider.ForceFlush() |> ignore
         
-        b.Setup()
-        b.Run()
+        
         0
         
         // let versions =
