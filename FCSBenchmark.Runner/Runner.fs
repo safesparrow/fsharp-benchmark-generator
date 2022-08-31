@@ -20,6 +20,10 @@ open NuGet.Protocol.Core.Types
 open NuGet.Common
 open NuGet.Protocol
 open NuGet.Versioning
+open OpenTelemetry
+open OpenTelemetry.Resources
+
+
 
 
 [<MemoryDiagnoser>]
@@ -208,25 +212,58 @@ let parseVersions (officialVersions : string seq) (localNuGetSourceDirs : string
     Seq.append official local
     |> Seq.toList
 
+open FSharp.Compiler.Diagnostics.Activity
+open OpenTelemetry.Trace
+
 [<EntryPoint>]
 let main args =
     use parser = new Parser(fun x -> x.IgnoreUnknownArguments <- false)
     let result = parser.ParseArguments<RunnerArgs>(args)
     match result with
     | :? Parsed<RunnerArgs> as parsed ->
-        let versions =
-            parseVersions parsed.Value.OfficialVersions parsed.Value.LocalNuGetSourceDirs
-            |> function
-                | [] -> failwith "At least one version must be specified"
-                | versions -> versions
+        
+        let b = Benchmark()
+        Environment.SetEnvironmentVariable(Benchmark.InputEnvironmentVariable, parsed.Value.Input)
+        
+            
+        // eventually this would need to only export to the OLTP collector, and even then only if configured. always-on is no good.
+        // when this configuration becomes opt-in, we'll also need to safely check activities around every StartActivity call, because those could
+        // be null
+        use tracerProvider =
+            Sdk.CreateTracerProviderBuilder()
+               .AddSource(activitySourceName)
+               .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService(serviceName ="program", serviceVersion = "42.42.42.44"))
+               .AddOtlpExporter()
+               .AddZipkinExporter()
+               .Build();
+        use mainActivity = activitySource.StartActivity("main")
 
-        let defaultConfig = makeConfig versions parsed.Value
-        let summary = BenchmarkRunner.Run(typeof<Benchmark>, defaultConfig)
-        let analyser = summary.BenchmarksCases[0].Config.GetCompositeAnalyser()
-        let conclusions = List<Conclusion>(analyser.Analyse(summary))
-        MarkdownExporter.Console.ExportToLog(summary, ConsoleLogger.Default)
-        ConclusionHelper.Print(ConsoleLogger.Ascii, conclusions)
-        printfn $"Full Log available in '{summary.LogFilePath}'"
-        printfn $"Reports available in '{summary.ResultsDirectoryPath}'"
+        let forceCleanup() =
+            mainActivity.Dispose()
+            activitySource.Dispose()
+            tracerProvider.Dispose()
+        
+        b.Setup()
+        b.Run()
+        forceCleanup()
+        
+        b.Setup()
+        b.Run()
         0
+        
+        // let versions =
+        //     parseVersions parsed.Value.OfficialVersions parsed.Value.LocalNuGetSourceDirs
+        //     |> function
+        //         | [] -> failwith "At least one version must be specified"
+        //         | versions -> versions
+        //
+        // let defaultConfig = makeConfig versions parsed.Value
+        // let summary = BenchmarkRunner.Run(typeof<Benchmark>, defaultConfig)
+        // let analyser = summary.BenchmarksCases[0].Config.GetCompositeAnalyser()
+        // let conclusions = List<Conclusion>(analyser.Analyse(summary))
+        // MarkdownExporter.Console.ExportToLog(summary, ConsoleLogger.Default)
+        // ConclusionHelper.Print(ConsoleLogger.Ascii, conclusions)
+        // printfn $"Full Log available in '{summary.LogFilePath}'"
+        // printfn $"Reports available in '{summary.ResultsDirectoryPath}'"
+        // 0
     | _ -> failwith "Parse error"

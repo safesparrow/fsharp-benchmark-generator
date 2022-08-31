@@ -13,9 +13,15 @@
         <Compile Include="Runner.fs" />
     </ItemGroup>
 
-    <ItemGroup>
-        <PackageReference Include="FSharp.Compiler.Service" Version="40.0.0" />
-        <PackageReference Include="FSharp.Core" Version="5.0.2" />
+    <ItemGroup><!--        <PackageReference Include="FSharp.Compiler.Service" Version="40.0.0" />-->
+<!--        <PackageReference Include="FSharp.Core" Version="5.0.2" />-->
+    
+      <Reference Include="FSharp.Compiler.Service">
+        <HintPath>..\..\fsharp-otel\artifacts\bin\FSharp.Compiler.Service\Debug\netstandard2.0\FSharp.Compiler.Service.dll</HintPath>
+      </Reference>
+      <Reference Include="FSharp.Core">
+        <HintPath>..\..\fsharp-otel\artifacts\bin\FSharp.Compiler.Service\Debug\netstandard2.0\FSharp.Core.dll</HintPath>
+      </Reference>
     </ItemGroup>
 
     <ItemGroup>
@@ -23,6 +29,8 @@
       <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
       <PackageReference Include="NuGet.Client" Version="4.2.0" />
       <PackageReference Include="NuGet.Protocol" Version="6.3.0" />
+      <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.1.0" />
+      <PackageReference Include="OpenTelemetry.Exporter.Zipkin" Version="1.1.0" />
     </ItemGroup>
 
     <ItemGroup>
