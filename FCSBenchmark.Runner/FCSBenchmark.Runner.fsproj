@@ -17,10 +17,10 @@
 <!--        <PackageReference Include="FSharp.Core" Version="5.0.2" />-->
     
       <Reference Include="FSharp.Compiler.Service">
-        <HintPath>..\..\fsharp-otel\artifacts\bin\FSharp.Compiler.Service\Debug\netstandard2.0\FSharp.Compiler.Service.dll</HintPath>
+        <HintPath>..\..\fsharp-otel\artifacts\bin\FSharp.Compiler.Service\Release\netstandard2.0\FSharp.Compiler.Service.dll</HintPath>
       </Reference>
       <Reference Include="FSharp.Core">
-        <HintPath>..\..\fsharp-otel\artifacts\bin\FSharp.Compiler.Service\Debug\netstandard2.0\FSharp.Core.dll</HintPath>
+        <HintPath>..\..\fsharp-otel\artifacts\bin\FSharp.Compiler.Service\Release\netstandard2.0\FSharp.Core.dll</HintPath>
       </Reference>
     </ItemGroup>
 

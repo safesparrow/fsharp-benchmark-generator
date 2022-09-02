@@ -215,41 +215,70 @@ let parseVersions (officialVersions : string seq) (localNuGetSourceDirs : string
 open FSharp.Compiler.Diagnostics.Activity
 open OpenTelemetry.Trace
 
+type Mode =
+    | Parallel
+    | Sequential
+
 [<EntryPoint>]
 let main args =
     use parser = new Parser(fun x -> x.IgnoreUnknownArguments <- false)
     let result = parser.ParseArguments<RunnerArgs>(args)
     match result with
     | :? Parsed<RunnerArgs> as parsed ->
-        
         Environment.SetEnvironmentVariable(Benchmark.InputEnvironmentVariable, parsed.Value.Input)
         
-            
-        // eventually this would need to only export to the OLTP collector, and even then only if configured. always-on is no good.
-        // when this configuration becomes opt-in, we'll also need to safely check activities around every StartActivity call, because those could
-        // be null
+        let n = [3]
+        let sleep = [0]
+        let mode = [Mode.Parallel; Mode.Sequential]
         use tracerProvider =
-            Sdk.CreateTracerProviderBuilder()
-               .AddSource(activitySourceName)
-               .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService(serviceName ="program", serviceVersion = "42.42.42.44"))
-               // .AddOtlpExporter()
-               // .AddZipkinExporter()
-               .AddJaegerExporter()
-               .Build()
-        use mainActivity = activitySource.StartActivity("main")
+                Sdk.CreateTracerProviderBuilder()
+                   .AddSource(activitySourceName)
+                   .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService(serviceName ="program", serviceVersion = "42.42.42.44"))
+                   // .AddOtlpExporter()
+                   // .AddZipkinExporter()
+                   .AddJaegerExporter(fun c ->
+                       c.BatchExportProcessorOptions.MaxQueueSize <- 10000000
+                       c.BatchExportProcessorOptions.MaxExportBatchSize <- 10000000
+                       c.ExportProcessorType <- ExportProcessorType.Simple
+                       //c.MaxPayloadSizeInBytes <- Nullable(1000000000)
+                    )
+                   .Build()
+                   
+        mode
+        |> List.allPairs sleep
+        |> List.allPairs n
+        |> List.iter (fun (n, (sleep, mode)) ->
+            // eventually this would need to only export to the OLTP collector, and even then only if configured. always-on is no good.
+            // when this configuration becomes opt-in, we'll also need to safely check activities around every StartActivity call, because those could
+            // be null
+            
+            use mainActivity = activitySource.StartActivity($"n={n}_sleep={sleep}_mode={mode}")
 
-        let forceCleanup() =
-            mainActivity.Dispose()
-            activitySource.Dispose()
-            tracerProvider.Dispose()
-        
-        for i in [1..10] do
+            let forceCleanup() =
+                mainActivity.Dispose()
+                // activitySource.Dispose()
+                //tracerProvider.Dispose()
+            
             let b = Benchmark()
             b.Setup()
-            b.Run()
-            tracerProvider.ForceFlush() |> ignore
-        
-        
+            let p = match mode with Parallel -> "true" | _ -> "false"
+            Environment.SetEnvironmentVariable("FCS_PARALLEL_PROJECTS_ANALYSIS", p)
+            [1..n]
+            |> List.map (fun i ->
+                async {
+                    Thread.Sleep(i * sleep)
+                    use iteration = activitySource.StartActivity("iteration")
+                    iteration.AddTag("index", i) |> ignore
+                    b.Run()
+                    tracerProvider.ForceFlush() |> ignore
+                }
+            )
+            |> Async.Parallel
+            |> Async.RunSynchronously
+            |> ignore
+            Thread.Sleep(1000)
+            forceCleanup()
+        )
         0
         
         // let versions =
