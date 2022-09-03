@@ -329,7 +329,7 @@ let prepareCase (args : Args) : BenchmarkCase =
                     [
                         {
                             CodebasePrepStep.Command = "dotnet"
-                            CodebasePrepStep.Args = $"restore {case.SlnRelative}"
+                            CodebasePrepStep.Args = $"msbuild /t:Restore /p:RestoreUseStaticGraphEvaluation=true {case.SlnRelative}"
                         }
                     ]
                 let codebasePrep =

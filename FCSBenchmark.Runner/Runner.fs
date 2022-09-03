@@ -227,7 +227,7 @@ let main args =
     | :? Parsed<RunnerArgs> as parsed ->
         Environment.SetEnvironmentVariable(Benchmark.InputEnvironmentVariable, parsed.Value.Input)
         
-        let n = [3]
+        let n = [1]
         let sleep = [0]
         let mode = [Mode.Parallel; Mode.Sequential]
         use tracerProvider =
