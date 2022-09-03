@@ -15,6 +15,7 @@ open BenchmarkDotNet.Attributes
 open BenchmarkDotNet.Running
 open FCSBenchmark.Common.Dtos
 open CommandLine
+open FSharp.Compiler.Diagnostics
 open NuGet.Packaging.Core
 open NuGet.Protocol.Core.Types
 open NuGet.Common
@@ -22,12 +23,10 @@ open NuGet.Protocol
 open NuGet.Versioning
 open OpenTelemetry
 open OpenTelemetry.Resources
-
-
-
+open OpenTelemetry.Trace
 
 [<MemoryDiagnoser>]
-type Benchmark () =    
+type Benchmark () =
     
     let printDiagnostics (results : FSharpCheckFileResults) =
         match results.Diagnostics with
@@ -58,20 +57,53 @@ type Benchmark () =
             )
             
     let mutable setup : (FSharpChecker * BenchmarkAction list) option = None
-        
+    let mutable tracerProvider : TracerProvider option = None
+    
     static member InputEnvironmentVariable = "FcsBenchmarkInput"
+    static member OtelEnvironmentVariable = "FcsBenchmarkRecordOtelJaeger"
         
-    [<GlobalSetup>]
-    member _.Setup() =
-        let inputFile = Environment.GetEnvironmentVariable(Benchmark.InputEnvironmentVariable)
+    member _.SetupTelemetry() =
+        let useTracing =
+            match Environment.GetEnvironmentVariable(Benchmark.OtelEnvironmentVariable) |> bool.TryParse with
+            | true, useTelemetry -> useTelemetry
+            | false, _ -> false
+        
+        tracerProvider <-
+            if useTracing then
+                Sdk.CreateTracerProviderBuilder()
+                   .AddSource("fsc")
+                   .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService(serviceName="program", serviceVersion = "42.42.42.44"))
+                   .AddJaegerExporter()
+                   // .AddJaegerExporter(fun c ->
+                   //     c.BatchExportProcessorOptions.MaxQueueSize <- 10000000
+                   //     c.BatchExportProcessorOptions.MaxExportBatchSize <- 10000000
+                   //     c.ExportProcessorType <- ExportProcessorType.Simple
+                   //     //c.MaxPayloadSizeInBytes <- Nullable(1000000000)
+                   //  )
+                   .Build()
+                |> Some
+            else
+                None
+    
+    static member ReadInput(inputFile : string) =
         if File.Exists(inputFile) then
             printfn $"Deserializing inputs from '{inputFile}'"
             let json = File.ReadAllText(inputFile)
-            let inputs = deserializeInputs json
+            deserializeInputs json
+        else
+            failwith $"Input file '{inputFile}' does not exist"
+    
+    [<GlobalSetup>]
+    member this.Setup() =
+        let inputFile = Environment.GetEnvironmentVariable(Benchmark.InputEnvironmentVariable)
+        if File.Exists(inputFile) then
+            let inputs = Benchmark.ReadInput(inputFile)
             let checker = FSharpChecker.Create(projectCacheSize = inputs.Config.ProjectCacheSize)
             setup <- (checker, inputs.Actions) |> Some
         else
             failwith $"Input file '{inputFile}' does not exist"
+            
+        this.SetupTelemetry()
 
     [<Benchmark>]
     member _.Run() =
@@ -86,7 +118,16 @@ type Benchmark () =
     member _.Cleanup() =
         setup
         |> Option.iter (fun (checker, _) -> cleanCaches checker)
-
+        match tracerProvider with
+        | Some tracerProvider ->
+            tracerProvider.ForceFlush() |> ignore
+        | None -> ()
+        
+    [<GlobalCleanup>]
+    member _.GlobalCleanup() =
+        tracerProvider
+        |> Option.iter (fun prov -> prov.Dispose())
+        
 [<RequireQualifiedAccess>]
 type NuGetFCSVersion =
     | Official of version : string
@@ -157,8 +198,8 @@ module NuGet =
 
 type RunnerArgs =
     {
-        [<Option("input", Required = true, HelpText = "Input json")>]
-        Input : string
+        [<Option("input", Required = true, HelpText = "Input json. Accepts multiple values.")>]
+        Input : string seq
         [<Option("official", Required = false, HelpText = "List of official NuGet versions of FCS to test")>]
         OfficialVersions : string seq
         [<Option("local", Required = false, HelpText = "List of local NuGet source directories to use as sources of FCS dll to test")>]
@@ -169,6 +210,8 @@ type RunnerArgs =
         Warmups : int
         [<Option("artifacts-path", Required = false, HelpText = "BDN Artifacts output path")>]
         ArtifactsPath : string
+        [<Option("record-otel-jaeger", Required = false, Default = false, HelpText = "If enabled, records and sends OpenTelemetry trace to a localhost Jaeger instance using the default port")>]
+        RecordOtelJaeger : bool
     }
 
 let private makeConfig (versions : NuGetFCSVersion list) (args : RunnerArgs) : IConfig =
@@ -176,15 +219,19 @@ let private makeConfig (versions : NuGetFCSVersion list) (args : RunnerArgs) : I
         Job.ShortRun
             .WithWarmupCount(args.Warmups)
             .WithIterationCount(args.Iterations)
+    let inputs = args.Input |> Seq.toList
+    let combinations = List.allPairs inputs versions
     let jobs =
-        versions
+        combinations
         |> List.mapi (
-            fun i v ->
+            fun i (input, version) ->
+                let versionName = match version with NuGetFCSVersion.Official v -> v | NuGetFCSVersion.Local source -> source
+                let jobName = $"{input}__{version}"
                 let job =
                     baseJob
-                        .WithNuGet(NuGet.makeReferenceList v)
-                        .WithEnvironmentVariable(Benchmark.InputEnvironmentVariable, args.Input)
-                        .WithId(match v with NuGetFCSVersion.Official v -> v | NuGetFCSVersion.Local source -> source)
+                        .WithNuGet(NuGet.makeReferenceList version)
+                        .WithEnvironmentVariable(Benchmark.InputEnvironmentVariable, input)
+                        .WithId(match version with NuGetFCSVersion.Official v -> v | NuGetFCSVersion.Local source -> source)
                 job
         )
     
@@ -212,12 +259,63 @@ let parseVersions (officialVersions : string seq) (localNuGetSourceDirs : string
     Seq.append official local
     |> Seq.toList
 
-open FSharp.Compiler.Diagnostics.Activity
-open OpenTelemetry.Trace
-
 type Mode =
     | Parallel
     | Sequential
+
+let activitySourceName = "fsc"
+
+let runManualIteration n sleep mode =
+    use mainActivity = Activity.instance.StartNoTags $"n={n}_sleep={sleep}_mode={mode}"
+    let b = Benchmark()
+    b.Setup()
+    let p = match mode with Parallel -> "true" | _ -> "false"
+    //Environment.SetEnvironmentVariable("FCS_PARALLEL_PROJECTS_ANALYSIS", "true")
+    [1..n]
+    |> List.map (fun i ->
+        async {
+            Thread.Sleep(i * sleep)
+            use _ = Activity.instance.Start "iteration" [|"index", i|]
+            b.Run()
+            b.Cleanup()
+        }
+    )
+    |> Async.Parallel
+    |> Async.RunSynchronously
+    |> ignore
+    
+    b.GlobalCleanup()
+
+let runManual args =
+    for input in args.Input do
+        Environment.SetEnvironmentVariable(Benchmark.InputEnvironmentVariable, input)
+        Environment.SetEnvironmentVariable(Benchmark.OtelEnvironmentVariable, if args.RecordOtelJaeger then "true" else "false")
+        
+        let n = [1]
+        let sleep = [0]
+        let mode = [Mode.Parallel; Mode.Sequential]
+                   
+        mode
+        |> List.allPairs sleep
+        |> List.allPairs n
+        |> List.iter (fun (n, (sleep, mode)) -> runManualIteration n sleep mode)
+
+let runStandard args =
+    let versions =
+        parseVersions args.OfficialVersions args.LocalNuGetSourceDirs
+        |> function
+            | [] -> failwith "At least one version must be specified"
+            | versions -> versions
+    
+    let defaultConfig = makeConfig versions args
+    let summary = BenchmarkRunner.Run(typeof<Benchmark>, defaultConfig)
+    let analyser = summary.BenchmarksCases[0].Config.GetCompositeAnalyser()
+    let conclusions = List<Conclusion>(analyser.Analyse(summary))
+    MarkdownExporter.Console.ExportToLog(summary, ConsoleLogger.Default)
+    ConclusionHelper.Print(ConsoleLogger.Ascii, conclusions)
+    printfn $"Full Log available in '{summary.LogFilePath}'"
+    printfn $"Reports available in '{summary.ResultsDirectoryPath}'"
+    0
 
 [<EntryPoint>]
 let main args =
@@ -225,75 +323,7 @@ let main args =
     let result = parser.ParseArguments<RunnerArgs>(args)
     match result with
     | :? Parsed<RunnerArgs> as parsed ->
-        Environment.SetEnvironmentVariable(Benchmark.InputEnvironmentVariable, parsed.Value.Input)
-        
-        let n = [1]
-        let sleep = [0]
-        let mode = [Mode.Parallel; Mode.Sequential]
-        use tracerProvider =
-                Sdk.CreateTracerProviderBuilder()
-                   .AddSource(activitySourceName)
-                   .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService(serviceName ="program", serviceVersion = "42.42.42.44"))
-                   // .AddOtlpExporter()
-                   // .AddZipkinExporter()
-                   .AddJaegerExporter(fun c ->
-                       c.BatchExportProcessorOptions.MaxQueueSize <- 10000000
-                       c.BatchExportProcessorOptions.MaxExportBatchSize <- 10000000
-                       c.ExportProcessorType <- ExportProcessorType.Simple
-                       //c.MaxPayloadSizeInBytes <- Nullable(1000000000)
-                    )
-                   .Build()
-                   
-        mode
-        |> List.allPairs sleep
-        |> List.allPairs n
-        |> List.iter (fun (n, (sleep, mode)) ->
-            // eventually this would need to only export to the OLTP collector, and even then only if configured. always-on is no good.
-            // when this configuration becomes opt-in, we'll also need to safely check activities around every StartActivity call, because those could
-            // be null
-            
-            use mainActivity = activitySource.StartActivity($"n={n}_sleep={sleep}_mode={mode}")
-
-            let forceCleanup() =
-                mainActivity.Dispose()
-                // activitySource.Dispose()
-                //tracerProvider.Dispose()
-            
-            let b = Benchmark()
-            b.Setup()
-            let p = match mode with Parallel -> "true" | _ -> "false"
-            Environment.SetEnvironmentVariable("FCS_PARALLEL_PROJECTS_ANALYSIS", p)
-            [1..n]
-            |> List.map (fun i ->
-                async {
-                    Thread.Sleep(i * sleep)
-                    use iteration = activitySource.StartActivity("iteration")
-                    iteration.AddTag("index", i) |> ignore
-                    b.Run()
-                    tracerProvider.ForceFlush() |> ignore
-                }
-            )
-            |> Async.Parallel
-            |> Async.RunSynchronously
-            |> ignore
-            Thread.Sleep(1000)
-            forceCleanup()
-        )
+        runManual parsed.Value
         0
-        
-        // let versions =
-        //     parseVersions parsed.Value.OfficialVersions parsed.Value.LocalNuGetSourceDirs
-        //     |> function
-        //         | [] -> failwith "At least one version must be specified"
-        //         | versions -> versions
-        //
-        // let defaultConfig = makeConfig versions parsed.Value
-        // let summary = BenchmarkRunner.Run(typeof<Benchmark>, defaultConfig)
-        // let analyser = summary.BenchmarksCases[0].Config.GetCompositeAnalyser()
-        // let conclusions = List<Conclusion>(analyser.Analyse(summary))
-        // MarkdownExporter.Console.ExportToLog(summary, ConsoleLogger.Default)
-        // ConclusionHelper.Print(ConsoleLogger.Ascii, conclusions)
-        // printfn $"Full Log available in '{summary.LogFilePath}'"
-        // printfn $"Reports available in '{summary.ResultsDirectoryPath}'"
-        // 0
+        //runStandard parsed.Value
     | _ -> failwith "Parse error"

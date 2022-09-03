@@ -233,7 +233,7 @@ type DisposableTempDir() =
     
     member this.Dir = dir
 
-let private prepareAndRun (config : Config) (case : BenchmarkCase) (dryRun : bool) (cleanup : bool) (iterations : int) (warmups : int) (versions : NuGetFCSVersion list) =
+let private prepareAndRun (config : Config) (case : BenchmarkCase) (dryRun : bool) (cleanup : bool) (iterations : int) (warmups : int) (testParallelAnalysis : bool) (versions : NuGetFCSVersion list) =
     let codebase = prepareCodebase config case
     let inputs = generateInputs case codebase.Path
     let inputsPath = makeInputsPath codebase.Path
@@ -296,7 +296,7 @@ type Args =
         CheckoutsDir : string
         [<CommandLine.Option("forceFcsBuild", Default = false, HelpText = "Force build git-sourced FCS versions even if the binaries already exist")>]
         ForceFCSBuild : bool
-        [<CommandLine.Option('i', SetName = "input", HelpText = "Path to the input file describing the benchmark")>]
+        [<CommandLine.Option('i', SetName = "input", HelpText = "Path to the input file describing the benchmark.")>]
         Input : string
         [<CommandLine.Option("sample", SetName = "input", HelpText = "Use a predefined sample benchmark with the given name")>]
         SampleInput : string
@@ -316,7 +316,26 @@ type Args =
         LocalNuGetSourceDirs : string seq
         [<Option("github", Required = false, HelpText = "An FSharp repository&revision, in the form 'owner/repo/revision' eg. 'dotnet/fsharp/5a72e586278150b7aea4881829cd37be872b2043. Supports multiple values.")>]
         GitHubVersions : string seq
+        [<Option("test-parallel-analysis", Default = false, Required = false, HelpText = "If enabled, runs two benchmark jobs - with FCS_PARALLEL_PROJECT_ANALYSIS = 'true' and 'false'")>]
+        TestParallelAnalysis : bool
     }
+
+let readSampleInput (sampleName : string) =
+    let assemblyDir = Path.GetDirectoryName(Assembly.GetAssembly(typeof<Args>).Location)
+    let path = Path.Combine(assemblyDir, "inputs", $"{sampleName}.json")
+    if File.Exists(path) then path
+    else
+        let dir = Path.GetDirectoryName(path)
+        if Directory.Exists(dir) then
+            let samples =
+                Directory.EnumerateFiles(dir, "*.json")
+                |> Seq.map Path.GetFileNameWithoutExtension
+            let samplesString =
+                let str = String.Join(", ", samples)
+                $"[{str}]"
+            failwith $"Sample {path} does not exist. Available samples are: {samplesString}"
+        else
+            failwith $"Samples directory '{dir}' does not exist"
 
 let prepareCase (args : Args) : BenchmarkCase =
     use _ = LogContext.PushProperty("step", "Read input")
@@ -325,22 +344,7 @@ let prepareCase (args : Args) : BenchmarkCase =
             match args.Input |> Option.ofObj, args.SampleInput |> Option.ofObj with
             | None, None -> failwith $"No input specified"
             | Some input, _ -> input
-            | None, Some sample ->
-                let assemblyDir = Path.GetDirectoryName(Assembly.GetAssembly(typeof<Args>).Location)
-                let path = Path.Combine(assemblyDir, "inputs", $"{sample}.json")
-                if File.Exists(path) then path
-                else
-                    let dir = Path.GetDirectoryName(path)
-                    if Directory.Exists(dir) then
-                        let samples =
-                            Directory.EnumerateFiles(dir, "*.json")
-                            |> Seq.map Path.GetFileNameWithoutExtension
-                        let samplesString =
-                            let str = String.Join(", ", samples)
-                            $"[{str}]"
-                        failwith $"Sample {path} does not exist. Available samples are: {samplesString}"
-                    else
-                        failwith $"Samples directory '{dir}' does not exist"
+            | None, Some sample -> readSampleInput sample
                     
         log.Verbose("Read and deserialize inputs from {path}", path)
         path
@@ -393,7 +397,6 @@ let prepareFCSVersions (config : Config) (raw : FCSVersionsArgs) =
         | [] -> failwith "At least one version must be specified"
         | versions -> versions
 
-
 let run (args : Args) : unit =
     log <- LoggerConfiguration().Enrich.FromLogContext()
                .WriteTo.Console(outputTemplate = "[{Timestamp:HH:mm:ss} {Level:u3}] {step:j}: {Message:lj}{NewLine}{Exception}")
@@ -412,19 +415,17 @@ let run (args : Args) : unit =
         let case = prepareCase args
         
         use _ = LogContext.PushProperty("step", "PrepareAndRun")
-        prepareAndRun config case args.DryRun args.Cleanup args.Iterations args.Warmups versions
+        prepareAndRun config case args.DryRun args.Cleanup args.Iterations args.Warmups args.TestParallelAnalysis versions
     with ex ->
         if args.Verbose then
             log.Fatal(ex, "Failure.")
         else
             log.Fatal(ex, "Failure. Consider using --verbose for extra information.")
-        
+
 [<EntryPoint>]
 [<MethodImpl(MethodImplOptions.NoInlining)>]
 let main args =
     let parseResult = Parser.Default.ParseArguments<Args> args
-    parseResult
-        .WithParsed(run)
-    |> ignore        
-    
+    parseResult.WithParsed(run)
+    |> ignore    
     if parseResult.Tag = ParserResultType.Parsed then 0 else 1
