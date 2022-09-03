@@ -217,7 +217,21 @@ let rec copyRunnerProjectFilesToTemp (sourceDir : string) =
     with _ ->
         Directory.Delete(buildDir, recursive = true)
         reraise()
+
+type DisposableTempDir() =
+    let path = Path.GetTempFileName()
+    do
+        File.Delete(path)
+    let dir = Directory.CreateDirectory(path)
     
+    interface IDisposable with
+        member _.Dispose() =
+            if dir.Exists then
+                try
+                    dir.Delete()
+                with e -> log.Warning("Failed to delete temp directory {dir}.", dir.FullName)
+    
+    member this.Dir = dir
 
 let private prepareAndRun (config : Config) (case : BenchmarkCase) (dryRun : bool) (cleanup : bool) (iterations : int) (warmups : int) (versions : NuGetFCSVersion list) =
     let codebase = prepareCodebase config case
@@ -232,7 +246,15 @@ let private prepareAndRun (config : Config) (case : BenchmarkCase) (dryRun : boo
         use _ = LogContext.PushProperty("step", "Run")
         let workingDir = Path.GetDirectoryName(Assembly.GetAssembly(typeof<RepoSpec>).Location)
         let workingDir = copyRunnerProjectFilesToTemp workingDir
-        let envVariables = emptyProjInfoEnvironmentVariables() @ ["DOTNET_ROOT_X64", ""]
+        use nugetPackagesDir = new DisposableTempDir()
+        let extraEnvVariables =
+            [
+                "DOTNET_ROOT_X64", ""
+                // Avoid caching NuGet packages by the benchmark by using a temp directory.
+                // Otherwise newer versions of locally-built FCS might be shadowed by older versions
+                "NUGET_PACKAGES", nugetPackagesDir.Dir.FullName
+            ]
+        let envVariables = emptyProjInfoEnvironmentVariables() @ extraEnvVariables
         let bdnArtifactsDir = Path.Combine(Environment.CurrentDirectory, "BenchmarkDotNet.Artifacts")
         let exe = "dotnet"
         let versionsArgs =
