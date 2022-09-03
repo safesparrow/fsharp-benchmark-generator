@@ -275,7 +275,7 @@ let runManualIteration n sleep mode =
     |> List.map (fun i ->
         async {
             Thread.Sleep(i * sleep)
-            use _ = Activity.instance.Start "iteration" [|"index", i|]
+            //use _ = Activity.instance.Start "iteration" [|"index", i|]
             b.Run()
             b.Cleanup()
         }
@@ -293,7 +293,7 @@ let runManual args =
         
         let n = [1]
         let sleep = [0]
-        let mode = [Mode.Parallel; Mode.Sequential]
+        let mode = [Mode.Sequential]//; Mode.Sequential]
                    
         mode
         |> List.allPairs sleep
