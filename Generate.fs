@@ -198,6 +198,13 @@ let private readJsonResultsSummary (bdnArtifactsDir : string) (benchmarkClass : 
     let jObject = JsonConvert.DeserializeObject<JObject>(json)
     extractResultsFromJson jObject
 
+let copyDir sourceDir targetDir =
+    Directory.CreateDirectory(targetDir) |> ignore
+    Directory.EnumerateFiles(sourceDir)
+    |> Seq.iter (fun sourceFile ->
+        File.Copy(sourceFile, Path.Combine(targetDir, Path.GetFileName(sourceFile)))
+    )
+
 let rec copyRunnerProjectFilesToTemp (sourceDir : string) =
     let buildDir =
         let file = Path.GetTempFileName()
@@ -205,7 +212,7 @@ let rec copyRunnerProjectFilesToTemp (sourceDir : string) =
         Path.Combine(Path.GetDirectoryName(file), Path.GetFileNameWithoutExtension(file))
     try
         Directory.CreateDirectory(buildDir) |> ignore
-        for dirName in ["FCSBenchmark.Runner"; "FCSBenchmark.Serialisation"] do
+        for dirName in ["Runner"; "Serialisation"] do
             let sourceDir = Path.Combine(sourceDir, dirName)
             let targetDir = Path.Combine(buildDir, dirName)
             Directory.CreateDirectory(targetDir) |> ignore
@@ -213,7 +220,7 @@ let rec copyRunnerProjectFilesToTemp (sourceDir : string) =
             |> Seq.iter (fun sourceFile ->
                 File.Copy(sourceFile, Path.Combine(targetDir, Path.GetFileName(sourceFile)))
             )
-        Path.Combine(buildDir, "FCSBenchmark.Runner")
+        Path.Combine(buildDir, "Runner")
     with _ ->
         Directory.Delete(buildDir, recursive = true)
         reraise()
@@ -233,7 +240,18 @@ type DisposableTempDir() =
     
     member this.Dir = dir
 
-let private prepareAndRun (config : Config) (case : BenchmarkCase) (dryRun : bool) (cleanup : bool) (iterations : int) (warmups : int) (versions : NuGetFCSVersion list) =
+let private prepareAndRun
+    (config : Config)
+    (case : BenchmarkCase)
+    (dryRun : bool)
+    (cleanup : bool)
+    (iterations : int)
+    (warmups : int)
+    (recordOtelJaeger : bool)
+    (parallelAnalysisMode : ParallelAnalysisMode)
+    (gcMode : GCMode)
+    (versions : NuGetFCSVersion list)
+    =
     let codebase = prepareCodebase config case
     let inputs = generateInputs case codebase.Path
     let inputsPath = makeInputsPath codebase.Path
@@ -252,7 +270,7 @@ let private prepareAndRun (config : Config) (case : BenchmarkCase) (dryRun : boo
                 "DOTNET_ROOT_X64", ""
                 // Avoid caching NuGet packages by the benchmark by using a temp directory.
                 // Otherwise newer versions of locally-built FCS might be shadowed by older versions
-                "NUGET_PACKAGES", nugetPackagesDir.Dir.FullName
+                // "NUGET_PACKAGES", nugetPackagesDir.Dir.FullName
             ]
         let envVariables = emptyProjInfoEnvironmentVariables() @ extraEnvVariables
         let bdnArtifactsDir = Path.Combine(Environment.CurrentDirectory, "BenchmarkDotNet.Artifacts")
@@ -272,8 +290,11 @@ let private prepareAndRun (config : Config) (case : BenchmarkCase) (dryRun : boo
                 | locals ->
                     "--local " + String.Join(" ", locals |> List.map (fun local -> local.TrimEnd([|'\\'; '/'|])))
             o + " " + l
+        let otelStr = $"--record-otel-jaeger={recordOtelJaeger}"
+        let parallelAnalysisStr = $"--parallel-analysis={parallelAnalysisMode}"
+        let gcModeStr = $"--gc={gcMode}"
         let artifactsPath = Path.Combine(Environment.CurrentDirectory, "FCSBenchmark.Artifacts")
-        let args = $"run -c Release -- --artifacts-path={artifactsPath} --input={inputsPath} --iterations={iterations} --warmups={warmups} {versionsArgs}".Trim()
+        let args = $"run -c Release -- --artifacts-path={artifactsPath} --input={inputsPath} --iterations={iterations} --warmups={warmups} {otelStr} {parallelAnalysisStr} {gcModeStr} {versionsArgs}".Trim()
         log.Information(
             "Starting the benchmark:\n\
              - Full BDN output can be found in {artifactFiles}.\n\
@@ -296,7 +317,7 @@ type Args =
         CheckoutsDir : string
         [<CommandLine.Option("forceFcsBuild", Default = false, HelpText = "Force build git-sourced FCS versions even if the binaries already exist")>]
         ForceFCSBuild : bool
-        [<CommandLine.Option('i', SetName = "input", HelpText = "Path to the input file describing the benchmark")>]
+        [<CommandLine.Option('i', SetName = "input", HelpText = "Path to the input file describing the benchmark.")>]
         Input : string
         [<CommandLine.Option("sample", SetName = "input", HelpText = "Use a predefined sample benchmark with the given name")>]
         SampleInput : string
@@ -316,7 +337,30 @@ type Args =
         LocalNuGetSourceDirs : string seq
         [<Option("github", Required = false, HelpText = "An FSharp repository&revision, in the form 'owner/repo/revision' eg. 'dotnet/fsharp/5a72e586278150b7aea4881829cd37be872b2043. Supports multiple values.")>]
         GitHubVersions : string seq
+        [<Option("record-otel-jaeger", Required = false, Default = false, HelpText = "If enabled, records and sends OpenTelemetry trace to a localhost Jaeger instance using the default port")>]
+        RecordOtelJaeger : bool
+        [<Option("parallel-analysis", Default = ParallelAnalysisMode.Off, Required = false, HelpText = "Off = parallel analysis off, On = parallel analysis on, Compare = runs two benchmarks with parallel analysis on and off")>]
+        ParallelAnalysis : ParallelAnalysisMode
+        [<Option("gc", Default = GCMode.Workstation, Required = false, HelpText = "Whether to use 'workstation' or 'server' GC, or 'compare'.")>]
+        GCMode : GCMode
     }
+
+let readSampleInput (sampleName : string) =
+    let assemblyDir = Path.GetDirectoryName(Assembly.GetAssembly(typeof<Args>).Location)
+    let path = Path.Combine(assemblyDir, "inputs", $"{sampleName}.json")
+    if File.Exists(path) then path
+    else
+        let dir = Path.GetDirectoryName(path)
+        if Directory.Exists(dir) then
+            let samples =
+                Directory.EnumerateFiles(dir, "*.json")
+                |> Seq.map Path.GetFileNameWithoutExtension
+            let samplesString =
+                let str = String.Join(", ", samples)
+                $"[{str}]"
+            failwith $"Sample {path} does not exist. Available samples are: {samplesString}"
+        else
+            failwith $"Samples directory '{dir}' does not exist"
 
 let prepareCase (args : Args) : BenchmarkCase =
     use _ = LogContext.PushProperty("step", "Read input")
@@ -325,22 +369,7 @@ let prepareCase (args : Args) : BenchmarkCase =
             match args.Input |> Option.ofObj, args.SampleInput |> Option.ofObj with
             | None, None -> failwith $"No input specified"
             | Some input, _ -> input
-            | None, Some sample ->
-                let assemblyDir = Path.GetDirectoryName(Assembly.GetAssembly(typeof<Args>).Location)
-                let path = Path.Combine(assemblyDir, "inputs", $"{sample}.json")
-                if File.Exists(path) then path
-                else
-                    let dir = Path.GetDirectoryName(path)
-                    if Directory.Exists(dir) then
-                        let samples =
-                            Directory.EnumerateFiles(dir, "*.json")
-                            |> Seq.map Path.GetFileNameWithoutExtension
-                        let samplesString =
-                            let str = String.Join(", ", samples)
-                            $"[{str}]"
-                        failwith $"Sample {path} does not exist. Available samples are: {samplesString}"
-                    else
-                        failwith $"Samples directory '{dir}' does not exist"
+            | None, Some sample -> readSampleInput sample
                     
         log.Verbose("Read and deserialize inputs from {path}", path)
         path
@@ -351,7 +380,7 @@ let prepareCase (args : Args) : BenchmarkCase =
                     [
                         {
                             CodebasePrepStep.Command = "dotnet"
-                            CodebasePrepStep.Args = $"restore {case.SlnRelative}"
+                            CodebasePrepStep.Args = $"msbuild /t:Restore /p:RestoreUseStaticGraphEvaluation=true {case.SlnRelative}"
                         }
                     ]
                 let codebasePrep =
@@ -393,7 +422,6 @@ let prepareFCSVersions (config : Config) (raw : FCSVersionsArgs) =
         | [] -> failwith "At least one version must be specified"
         | versions -> versions
 
-
 let run (args : Args) : unit =
     log <- LoggerConfiguration().Enrich.FromLogContext()
                .WriteTo.Console(outputTemplate = "[{Timestamp:HH:mm:ss} {Level:u3}] {step:j}: {Message:lj}{NewLine}{Exception}")
@@ -412,19 +440,17 @@ let run (args : Args) : unit =
         let case = prepareCase args
         
         use _ = LogContext.PushProperty("step", "PrepareAndRun")
-        prepareAndRun config case args.DryRun args.Cleanup args.Iterations args.Warmups versions
+        prepareAndRun config case args.DryRun args.Cleanup args.Iterations args.Warmups args.RecordOtelJaeger args.ParallelAnalysis args.GCMode versions
     with ex ->
         if args.Verbose then
             log.Fatal(ex, "Failure.")
         else
             log.Fatal(ex, "Failure. Consider using --verbose for extra information.")
-        
+
 [<EntryPoint>]
 [<MethodImpl(MethodImplOptions.NoInlining)>]
 let main args =
     let parseResult = Parser.Default.ParseArguments<Args> args
-    parseResult
-        .WithParsed(run)
-    |> ignore        
-    
+    parseResult.WithParsed(run)
+    |> ignore    
     if parseResult.Tag = ParserResultType.Parsed then 0 else 1

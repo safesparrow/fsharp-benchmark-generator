@@ -113,3 +113,12 @@ let deserializeInputs (json : string) : BenchmarkInputs =
     let dto = JsonConvert.DeserializeObject<BenchmarkInputsDto>(json, jsonSerializerSettings)
     inputsFromDto dto
     
+type ParallelAnalysisMode =
+    | Off = 0
+    | On = 1
+    | Compare = 2
+    
+type GCMode =
+    | Workstation = 0
+    | Server = 1
+    | Compare = 2

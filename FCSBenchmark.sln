@@ -1,10 +1,8 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "FCSBenchmark.Generator", "FCSBenchmark.Generator.fsproj", "{39D9CB01-D59C-44FA-A540-80707C51B6AC}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Runner", "Runner\Runner.fsproj", "{953A6E24-6770-4BBB-824D-8579A3C7B017}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "FCSBenchmark.Runner", "FCSBenchmark.Runner\FCSBenchmark.Runner.fsproj", "{953A6E24-6770-4BBB-824D-8579A3C7B017}"
-EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "FCSBenchmark.Serialisation", "FCSBenchmark.Serialisation\FCSBenchmark.Serialisation.fsproj", "{0046E446-D4C2-40F9-BB9A-BF1321EC5D13}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Generator", "Generator.fsproj", "{39D9CB01-D59C-44FA-A540-80707C51B6AC}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

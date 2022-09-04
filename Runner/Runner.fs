@@ -3,6 +3,8 @@
 open System
 open System.Collections.Generic
 open System.IO
+open System.IO.Compression
+open System.Text.RegularExpressions
 open System.Threading
 open BenchmarkDotNet.Analysers
 open BenchmarkDotNet.Configs
@@ -15,15 +17,62 @@ open BenchmarkDotNet.Attributes
 open BenchmarkDotNet.Running
 open FCSBenchmark.Common.Dtos
 open CommandLine
+open FSharp.Compiler.Diagnostics
 open NuGet.Packaging.Core
 open NuGet.Protocol.Core.Types
 open NuGet.Common
 open NuGet.Protocol
 open NuGet.Versioning
+open OpenTelemetry
+open OpenTelemetry.Resources
+open OpenTelemetry.Trace
+
+
+type DisposableTempDir() =
+    let path = Path.GetTempFileName()
+    do
+        File.Delete(path)
+    let dir = Directory.CreateDirectory(path)
+    
+    interface IDisposable with
+        member _.Dispose() =
+            if dir.Exists then
+                try
+                    dir.Delete()
+                with e -> printfn $"Failed to delete temp directory {dir.FullName}"
+    
+    member this.Dir = dir
+
+let copyDirContents sourceDir targetDir =
+    Directory.EnumerateFiles(sourceDir)
+    |> Seq.iter (fun sourceFile ->
+        File.Copy(sourceFile, Path.Combine(targetDir, Path.GetFileName(sourceFile)))
+    )
+
+let time = ((DateTimeOffset)DateTime.Now).ToUnixTimeSeconds()
+let mutable nugetCounter = 1
+let createHackedNugetSourceDir (dir : string) =
+    let copy = new DisposableTempDir()
+    copyDirContents dir copy.Dir.FullName
+    let nupkg =
+        copy.Dir.EnumerateFiles($"FSharp.Compiler.Service.*.nupkg")
+        |> Seq.exactlyOne
+    use c = new DisposableTempDir()
+    ZipFile.ExtractToDirectory(nupkg.FullName, c.Dir.FullName)
+    let nuspec = Path.Combine(c.Dir.FullName, "FSharp.Compiler.Service.nuspec")
+    let text = File.ReadAllText(nuspec)
+    let newVersion = $"1000.{time}.{nugetCounter}"
+    let replaced = Regex.Replace(text, "<version>.+</version>", $"<version>{newVersion}</version>")
+    nugetCounter <- nugetCounter + 1
+    File.WriteAllText(nuspec, replaced)
+    nupkg.Delete()
+    ZipFile.CreateFromDirectory(c.Dir.FullName, nupkg.FullName)
+    printfn $"Hacked NuGet source dir from {dir} to {copy.Dir.FullName}"
+    copy.Dir, newVersion
 
 
 [<MemoryDiagnoser>]
-type Benchmark () =    
+type Benchmark () =
     
     let printDiagnostics (results : FSharpCheckFileResults) =
         match results.Diagnostics with
@@ -54,20 +103,53 @@ type Benchmark () =
             )
             
     let mutable setup : (FSharpChecker * BenchmarkAction list) option = None
-        
+    let mutable tracerProvider : TracerProvider option = None
+    
     static member InputEnvironmentVariable = "FcsBenchmarkInput"
+    static member OtelEnvironmentVariable = "FcsBenchmarkRecordOtelJaeger"
+    static member ParallelProjectsAnalysisEnvironmentVariable = "FCS_PARALLEL_PROJECTS_ANALYSIS"
         
-    [<GlobalSetup>]
-    member _.Setup() =
-        let inputFile = Environment.GetEnvironmentVariable(Benchmark.InputEnvironmentVariable)
+    member _.SetupTelemetry() =
+        let useTracing =
+            match Environment.GetEnvironmentVariable(Benchmark.OtelEnvironmentVariable) |> bool.TryParse with
+            | true, useTelemetry -> useTelemetry
+            | false, _ -> false
+        
+        tracerProvider <-
+            if useTracing then
+                Sdk.CreateTracerProviderBuilder()
+                   .AddSource("fsc")
+                   .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService(serviceName="program", serviceVersion = "42.42.42.44"))
+                   .AddJaegerExporter()
+                   // .AddJaegerExporter(fun c ->
+                   //     c.BatchExportProcessorOptions.MaxQueueSize <- 10000000
+                   //     c.BatchExportProcessorOptions.MaxExportBatchSize <- 10000000
+                   //     c.ExportProcessorType <- ExportProcessorType.Simple
+                   //     //c.MaxPayloadSizeInBytes <- Nullable(1000000000)
+                   //  )
+                   .Build()
+                |> Some
+            else
+                None
+    
+    static member ReadInput(inputFile : string) =
         if File.Exists(inputFile) then
             printfn $"Deserializing inputs from '{inputFile}'"
             let json = File.ReadAllText(inputFile)
-            let inputs = deserializeInputs json
+            deserializeInputs json
+        else
+            failwith $"Input file '{inputFile}' does not exist"
+    
+    [<GlobalSetup>]
+    member this.Setup() =
+        let inputFile = Environment.GetEnvironmentVariable(Benchmark.InputEnvironmentVariable)
+        if File.Exists(inputFile) then
+            let inputs = Benchmark.ReadInput(inputFile)
             let checker = FSharpChecker.Create(projectCacheSize = inputs.Config.ProjectCacheSize)
             setup <- (checker, inputs.Actions) |> Some
         else
             failwith $"Input file '{inputFile}' does not exist"
+        this.SetupTelemetry()
 
     [<Benchmark>]
     member _.Run() =
@@ -82,7 +164,16 @@ type Benchmark () =
     member _.Cleanup() =
         setup
         |> Option.iter (fun (checker, _) -> cleanCaches checker)
-
+        match tracerProvider with
+        | Some tracerProvider ->
+            tracerProvider.ForceFlush() |> ignore
+        | None -> ()
+        
+    [<GlobalCleanup>]
+    member _.GlobalCleanup() =
+        tracerProvider
+        |> Option.iter (fun prov -> prov.Dispose())
+        
 [<RequireQualifiedAccess>]
 type NuGetFCSVersion =
     | Official of version : string
@@ -139,8 +230,15 @@ module NuGet =
                 failwith $"Could not find nupkg files with sourceDir='{sourceDir}.'\n\
                                Attempted the following candidate directories:\n\
                                {candidateDirsString}"
-            | head :: _ -> head
-       
+            | head :: _ ->
+                let source = head[0].PackageSource.LocalPath
+                let source, version = createHackedNugetSourceDir source
+                head
+                |> List.map (fun ref ->
+                    let version = match ref.PackageName with "FSharp.Compiler.Service" -> version | _ -> ref.PackageVersion
+                    NuGetReference(ref.PackageName, version, Uri(source.FullName), ref.Prerelease)
+                )
+                
     let makeReference (version : NuGetFCSVersion) =
         match version with
         | NuGetFCSVersion.Official version -> officialNuGet version
@@ -153,8 +251,8 @@ module NuGet =
 
 type RunnerArgs =
     {
-        [<Option("input", Required = true, HelpText = "Input json")>]
-        Input : string
+        [<Option("input", Required = true, HelpText = "Input json. Accepts multiple values.")>]
+        Input : string seq
         [<Option("official", Required = false, HelpText = "List of official NuGet versions of FCS to test")>]
         OfficialVersions : string seq
         [<Option("local", Required = false, HelpText = "List of local NuGet source directories to use as sources of FCS dll to test")>]
@@ -165,6 +263,12 @@ type RunnerArgs =
         Warmups : int
         [<Option("artifacts-path", Required = false, HelpText = "BDN Artifacts output path")>]
         ArtifactsPath : string
+        [<Option("record-otel-jaeger", Required = false, Default = false, HelpText = "If enabled, records and sends OpenTelemetry trace to a localhost Jaeger instance using the default port")>]
+        RecordOtelJaeger : bool
+        [<Option("parallel-analysis", Default = ParallelAnalysisMode.Off, Required = false, HelpText = "Off = parallel analysis off, On = parallel analysis on, Compare = runs two benchmarks with parallel analysis on and off")>]
+        ParallelAnalysis : ParallelAnalysisMode
+        [<Option("gc", Default = GCMode.Workstation, Required = false, HelpText = "Whether to use 'workstation' or 'server' GC, or 'compare'.")>]
+        GCMode : GCMode
     }
 
 let private makeConfig (versions : NuGetFCSVersion list) (args : RunnerArgs) : IConfig =
@@ -172,15 +276,44 @@ let private makeConfig (versions : NuGetFCSVersion list) (args : RunnerArgs) : I
         Job.ShortRun
             .WithWarmupCount(args.Warmups)
             .WithIterationCount(args.Iterations)
-    let jobs =
+    let inputs = args.Input |> Seq.toList
+    let parallelAnalysisModes =
+        match args.ParallelAnalysis with
+        | ParallelAnalysisMode.Off -> [false]
+        | ParallelAnalysisMode.On -> [true]
+        | ParallelAnalysisMode.Compare -> [true; false]
+        | unknown -> failwith $"Unrecognised value of 'parallelAnalysisMode': {unknown}"
+    
+    let gcModes =
+        match args.GCMode with
+        | GCMode.Workstation -> [GCMode.Workstation]
+        | GCMode.Server -> [GCMode.Server]
+        | GCMode.Compare -> [GCMode.Server; GCMode.Workstation]
+        | unknown -> failwith $"Unrecognised value of 'gcMode': {unknown}"
+        
+    let versionsSources =
         versions
+        |> List.map (fun version ->
+            let versionName = match version with NuGetFCSVersion.Official v -> v | NuGetFCSVersion.Local source -> source
+            let refs = NuGet.makeReferenceList version
+            versionName, refs
+        )
+        
+    let combinations = List.allPairs (List.allPairs (List.allPairs inputs versionsSources) parallelAnalysisModes) gcModes
+    let jobs =
+        combinations
         |> List.mapi (
-            fun i v ->
+            fun i (((input, (versionName, refs)), parallelAnalysisMode), gcMode) ->
+                let useServerGc = gcMode = GCMode.Server
+                let jobName = $"fcs={versionName}_parallel={parallelAnalysisMode}_serverGc={useServerGc}"
                 let job =
                     baseJob
-                        .WithNuGet(NuGet.makeReferenceList v)
-                        .WithEnvironmentVariable(Benchmark.InputEnvironmentVariable, args.Input)
-                        .WithId(match v with NuGetFCSVersion.Official v -> v | NuGetFCSVersion.Local source -> source)
+                        .WithNuGet(refs)
+                        .WithEnvironmentVariable(Benchmark.InputEnvironmentVariable, input)
+                        .WithEnvironmentVariable(Benchmark.ParallelProjectsAnalysisEnvironmentVariable, parallelAnalysisMode.ToString())
+                        .WithEnvironmentVariable(Benchmark.OtelEnvironmentVariable, if args.RecordOtelJaeger then "true" else "false")
+                        .WithGcServer(useServerGc)
+                        .WithId(jobName)
                 job
         )
     
@@ -208,25 +341,28 @@ let parseVersions (officialVersions : string seq) (localNuGetSourceDirs : string
     Seq.append official local
     |> Seq.toList
 
+let runStandard args =
+    let versions =
+        parseVersions args.OfficialVersions args.LocalNuGetSourceDirs
+        |> function
+            | [] -> failwith "At least one version must be specified"
+            | versions -> versions
+    
+    let defaultConfig = makeConfig versions args
+    let summary = BenchmarkRunner.Run(typeof<Benchmark>, defaultConfig)
+    let analyser = summary.BenchmarksCases[0].Config.GetCompositeAnalyser()
+    let conclusions = List<Conclusion>(analyser.Analyse(summary))
+    MarkdownExporter.Console.ExportToLog(summary, ConsoleLogger.Default)
+    ConclusionHelper.Print(ConsoleLogger.Ascii, conclusions)
+    printfn $"Full Log available in '{summary.LogFilePath}'"
+    printfn $"Reports available in '{summary.ResultsDirectoryPath}'"
+    0
+
 [<EntryPoint>]
 let main args =
     use parser = new Parser(fun x -> x.IgnoreUnknownArguments <- false)
     let result = parser.ParseArguments<RunnerArgs>(args)
     match result with
     | :? Parsed<RunnerArgs> as parsed ->
-        let versions =
-            parseVersions parsed.Value.OfficialVersions parsed.Value.LocalNuGetSourceDirs
-            |> function
-                | [] -> failwith "At least one version must be specified"
-                | versions -> versions
-
-        let defaultConfig = makeConfig versions parsed.Value
-        let summary = BenchmarkRunner.Run(typeof<Benchmark>, defaultConfig)
-        let analyser = summary.BenchmarksCases[0].Config.GetCompositeAnalyser()
-        let conclusions = List<Conclusion>(analyser.Analyse(summary))
-        MarkdownExporter.Console.ExportToLog(summary, ConsoleLogger.Default)
-        ConclusionHelper.Print(ConsoleLogger.Ascii, conclusions)
-        printfn $"Full Log available in '{summary.LogFilePath}'"
-        printfn $"Reports available in '{summary.ResultsDirectoryPath}'"
-        0
+        runStandard parsed.Value
     | _ -> failwith "Parse error"

@@ -15,7 +15,7 @@
     },
     {
       "Command": "dotnet",
-      "Args": "restore"      
+      "Args": "msbuild /t:Restore /p:RestoreUseStaticGraphEvaluation=true"      
     }
   ],
   "SlnRelative": "fantomas.sln",

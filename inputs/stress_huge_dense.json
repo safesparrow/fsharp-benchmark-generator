@@ -7,7 +7,7 @@
   "CodebasePrep": [
     {
       "Command": "dotnet",
-      "Args": "restore tests/projects/stress/huge_netstandard/dense/Dense.sln"
+      "Args": "msbuild /t:Restore /p:RestoreUseStaticGraphEvaluation=true tests/projects/stress/huge_netstandard/dense/Dense.sln"
     }
   ],
   "SlnRelative": "tests/projects/stress/huge_netstandard/dense/Dense.sln",
