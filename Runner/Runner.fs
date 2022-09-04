@@ -117,7 +117,6 @@ type Benchmark () =
         
         tracerProvider <-
             if useTracing then
-                printfn "USING TRACING"
                 Sdk.CreateTracerProviderBuilder()
                    .AddSource("fsc")
                    .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService(serviceName="program", serviceVersion = "42.42.42.44"))
@@ -150,7 +149,6 @@ type Benchmark () =
             setup <- (checker, inputs.Actions) |> Some
         else
             failwith $"Input file '{inputFile}' does not exist"
-            
         this.SetupTelemetry()
 
     [<Benchmark>]
@@ -307,7 +305,7 @@ let private makeConfig (versions : NuGetFCSVersion list) (args : RunnerArgs) : I
         |> List.mapi (
             fun i (((input, (versionName, refs)), parallelAnalysisMode), gcMode) ->
                 let useServerGc = gcMode = GCMode.Server
-                let jobName = $"{input}_fcs={versionName}_parallel={parallelAnalysisMode}_serverGc={useServerGc}"
+                let jobName = $"fcs={versionName}_parallel={parallelAnalysisMode}_serverGc={useServerGc}"
                 let job =
                     baseJob
                         .WithNuGet(refs)
@@ -343,47 +341,6 @@ let parseVersions (officialVersions : string seq) (localNuGetSourceDirs : string
     Seq.append official local
     |> Seq.toList
 
-type Mode =
-    | Parallel
-    | Sequential
-
-let activitySourceName = "fsc"
-
-let runManualIteration n sleep mode =
-    // use mainActivity = Activity.instance.StartNoTags $"n={n}_sleep={sleep}_mode={mode}"
-    let b = Benchmark()
-    b.Setup()
-    let p = match mode with Parallel -> "true" | _ -> "false"
-    //Environment.SetEnvironmentVariable("FCS_PARALLEL_PROJECTS_ANALYSIS", "true")
-    [1..n]
-    |> List.map (fun i ->
-        async {
-            Thread.Sleep(i * sleep)
-            //use _ = Activity.instance.Start "iteration" [|"index", i|]
-            b.Run()
-            b.Cleanup()
-        }
-    )
-    |> Async.Parallel
-    |> Async.RunSynchronously
-    |> ignore
-    
-    b.GlobalCleanup()
-
-let runManual args =
-    for input in args.Input do
-        Environment.SetEnvironmentVariable(Benchmark.InputEnvironmentVariable, input)
-        Environment.SetEnvironmentVariable(Benchmark.OtelEnvironmentVariable, if args.RecordOtelJaeger then "true" else "false")
-        let n = [1]
-        let sleep = [0]
-        let mode = [Mode.Sequential]//; Mode.Sequential]
-                   
-        mode
-        |> List.allPairs sleep
-        |> List.allPairs n
-        |> List.iter (fun (n, (sleep, mode)) -> runManualIteration n sleep mode)
-    0
-
 let runStandard args =
     let versions =
         parseVersions args.OfficialVersions args.LocalNuGetSourceDirs
@@ -407,6 +364,5 @@ let main args =
     let result = parser.ParseArguments<RunnerArgs>(args)
     match result with
     | :? Parsed<RunnerArgs> as parsed ->
-        //runManual parsed.Value
         runStandard parsed.Value
     | _ -> failwith "Parse error"
