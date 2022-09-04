@@ -212,6 +212,8 @@ type RunnerArgs =
         ArtifactsPath : string
         [<Option("record-otel-jaeger", Required = false, Default = false, HelpText = "If enabled, records and sends OpenTelemetry trace to a localhost Jaeger instance using the default port")>]
         RecordOtelJaeger : bool
+        [<Option("parallel-analysis", Default = ParallelAnalysisMode.Off, Required = false, HelpText = "Off = parallel analysis off, On = parallel analysis on, Compare = runs two benchmarks with parallel analysis on and off")>]
+        ParallelAnalysis : ParallelAnalysisMode
     }
 
 let private makeConfig (versions : NuGetFCSVersion list) (args : RunnerArgs) : IConfig =
@@ -220,18 +222,25 @@ let private makeConfig (versions : NuGetFCSVersion list) (args : RunnerArgs) : I
             .WithWarmupCount(args.Warmups)
             .WithIterationCount(args.Iterations)
     let inputs = args.Input |> Seq.toList
-    let combinations = List.allPairs inputs versions
+    let parallelAnalysisModes =
+        match args.ParallelAnalysis with
+        | ParallelAnalysisMode.Off -> [ParallelAnalysisMode.Off]
+        | ParallelAnalysisMode.On -> [ParallelAnalysisMode.On]
+        | ParallelAnalysisMode.Compare -> [ParallelAnalysisMode.Off; ParallelAnalysisMode.On]
+        | unknown -> failwith $"Unrecognised value of 'parallelAnalysisMode': {unknown}"
+        
+    let combinations = List.allPairs (List.allPairs inputs versions) parallelAnalysisModes
     let jobs =
         combinations
         |> List.mapi (
-            fun i (input, version) ->
+            fun i ((input, version), parallelAnalysisMode) ->
                 let versionName = match version with NuGetFCSVersion.Official v -> v | NuGetFCSVersion.Local source -> source
                 let jobName = $"{input}__{version}"
                 let job =
                     baseJob
                         .WithNuGet(NuGet.makeReferenceList version)
                         .WithEnvironmentVariable(Benchmark.InputEnvironmentVariable, input)
-                        .WithId(match version with NuGetFCSVersion.Official v -> v | NuGetFCSVersion.Local source -> source)
+                        .WithId(jobName)
                 job
         )
     
@@ -266,7 +275,7 @@ type Mode =
 let activitySourceName = "fsc"
 
 let runManualIteration n sleep mode =
-    use mainActivity = Activity.instance.StartNoTags $"n={n}_sleep={sleep}_mode={mode}"
+    // use mainActivity = Activity.instance.StartNoTags $"n={n}_sleep={sleep}_mode={mode}"
     let b = Benchmark()
     b.Setup()
     let p = match mode with Parallel -> "true" | _ -> "false"
@@ -299,6 +308,7 @@ let runManual args =
         |> List.allPairs sleep
         |> List.allPairs n
         |> List.iter (fun (n, (sleep, mode)) -> runManualIteration n sleep mode)
+    0
 
 let runStandard args =
     let versions =
@@ -323,7 +333,6 @@ let main args =
     let result = parser.ParseArguments<RunnerArgs>(args)
     match result with
     | :? Parsed<RunnerArgs> as parsed ->
-        runManual parsed.Value
-        0
-        //runStandard parsed.Value
+        //runManual parsed.Value
+        runStandard parsed.Value
     | _ -> failwith "Parse error"

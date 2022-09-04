@@ -6,7 +6,6 @@
         <OutputType>exe</OutputType>
         <RunWorkingDirectory>$(MSBuildProjectDirectory)</RunWorkingDirectory>
         <Description>A tool for generating and running high-level benchmarks of the FSharp compiler service (FCS)</Description>
-        <RootNamespace>FCSBenchmark.Generator2</RootNamespace>
         <NoWarn>NU1608</NoWarn>
 
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
@@ -14,6 +13,7 @@
         <PackageLicenseExpression>MIT</PackageLicenseExpression>
         <PackageId>FCSBenchmark</PackageId>
         <PackAsTool>true</PackAsTool>
+        <AssemblyName>FCSBenchmark.Generator</AssemblyName>
         <ToolCommandName>fcs-benchmark</ToolCommandName>
         <PackageProjectUrl>https://github.com/safesparrow/fsharp-benchmark-generator</PackageProjectUrl>
         <RepositoryUrl>https://github.com/safesparrow/fsharp-benchmark-generator</RepositoryUrl>
@@ -33,26 +33,25 @@
         <PackageReference Include="Serilog.Extensions.Logging" Version="3.1.0" />
         <PackageReference Include="Serilog.Sinks.Console" Version="4.0.1" />
         <PackageReference Include="Ionide.ProjInfo.FCS" Version="0.59.2" />
+        <PackageReference Include="FSharp.Compiler.Service" Version="41.0.5" />
     </ItemGroup>
     
     <ItemGroup>
-        <!-- Copied for use in FCSBenchmark.Runner -->
-        <None Include="FCSBenchmark.Runner\*.*" CopyToOutputDirectory="PreserveNewest" />
-        <None Include="FCSBenchmark.Serialisation\*.*" CopyToOutputDirectory="PreserveNewest" />
+        <!-- Copied for use in Runner -->
+        <None Include="Runner\*.*" CopyToOutputDirectory="PreserveNewest" />
         <None Include="inputs/*.json" CopyToOutputDirectory="PreserveNewest" />
         <None Include=".gitignore" />
         <None Include="README.md" />
         <Content Include="version.json" />
         <Compile Include="Log.fs" />
+        <Compile Include="Serialisation/Options.fs" CopyToOutputDirectory="PreserveNewest" />
+        <Compile Include="Serialisation/Dtos.fs" CopyToOutputDirectory="PreserveNewest" />
         <Compile Include="Utils.fs" />
         <Compile Include="Git.fs" />
         <Compile Include="RepoSetup.fs" />
         <Compile Include="FCSCheckouts.fs" />
         <Compile Include="Generate.fs" />
+        <None Include="Runner\Runner.fs" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
     
-    <ItemGroup>
-      <ProjectReference Include="FCSBenchmark.Serialisation\FCSBenchmark.Serialisation.fsproj" />
-    </ItemGroup>
-
 </Project>

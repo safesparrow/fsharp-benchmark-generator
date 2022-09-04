@@ -205,7 +205,7 @@ let rec copyRunnerProjectFilesToTemp (sourceDir : string) =
         Path.Combine(Path.GetDirectoryName(file), Path.GetFileNameWithoutExtension(file))
     try
         Directory.CreateDirectory(buildDir) |> ignore
-        for dirName in ["FCSBenchmark.Runner"; "FCSBenchmark.Serialisation"] do
+        for dirName in ["Runner"; "Serialisation"] do
             let sourceDir = Path.Combine(sourceDir, dirName)
             let targetDir = Path.Combine(buildDir, dirName)
             Directory.CreateDirectory(targetDir) |> ignore
@@ -213,7 +213,7 @@ let rec copyRunnerProjectFilesToTemp (sourceDir : string) =
             |> Seq.iter (fun sourceFile ->
                 File.Copy(sourceFile, Path.Combine(targetDir, Path.GetFileName(sourceFile)))
             )
-        Path.Combine(buildDir, "FCSBenchmark.Runner")
+        Path.Combine(buildDir, "Runner")
     with _ ->
         Directory.Delete(buildDir, recursive = true)
         reraise()
@@ -233,7 +233,7 @@ type DisposableTempDir() =
     
     member this.Dir = dir
 
-let private prepareAndRun (config : Config) (case : BenchmarkCase) (dryRun : bool) (cleanup : bool) (iterations : int) (warmups : int) (testParallelAnalysis : bool) (versions : NuGetFCSVersion list) =
+let private prepareAndRun (config : Config) (case : BenchmarkCase) (dryRun : bool) (cleanup : bool) (iterations : int) (warmups : int) (recordOtelJaeger : bool) (parallelAnalysisMode : ParallelAnalysisMode) (versions : NuGetFCSVersion list) =
     let codebase = prepareCodebase config case
     let inputs = generateInputs case codebase.Path
     let inputsPath = makeInputsPath codebase.Path
@@ -272,8 +272,10 @@ let private prepareAndRun (config : Config) (case : BenchmarkCase) (dryRun : boo
                 | locals ->
                     "--local " + String.Join(" ", locals |> List.map (fun local -> local.TrimEnd([|'\\'; '/'|])))
             o + " " + l
+        let otelStr = $"--record-otel-jaeger={recordOtelJaeger}"
+        let parallelAnalysisStr = $"--parallel-analysis={parallelAnalysisMode}"
         let artifactsPath = Path.Combine(Environment.CurrentDirectory, "FCSBenchmark.Artifacts")
-        let args = $"run -c Release -- --artifacts-path={artifactsPath} --input={inputsPath} --iterations={iterations} --warmups={warmups} {versionsArgs}".Trim()
+        let args = $"run -c Release -- --artifacts-path={artifactsPath} --input={inputsPath} --iterations={iterations} --warmups={warmups} {otelStr} {parallelAnalysisStr} {versionsArgs}".Trim()
         log.Information(
             "Starting the benchmark:\n\
              - Full BDN output can be found in {artifactFiles}.\n\
@@ -316,8 +318,10 @@ type Args =
         LocalNuGetSourceDirs : string seq
         [<Option("github", Required = false, HelpText = "An FSharp repository&revision, in the form 'owner/repo/revision' eg. 'dotnet/fsharp/5a72e586278150b7aea4881829cd37be872b2043. Supports multiple values.")>]
         GitHubVersions : string seq
-        [<Option("test-parallel-analysis", Default = false, Required = false, HelpText = "If enabled, runs two benchmark jobs - with FCS_PARALLEL_PROJECT_ANALYSIS = 'true' and 'false'")>]
-        TestParallelAnalysis : bool
+        [<Option("record-otel-jaeger", Required = false, Default = false, HelpText = "If enabled, records and sends OpenTelemetry trace to a localhost Jaeger instance using the default port")>]
+        RecordOtelJaeger : bool
+        [<Option("parallel-analysis", Default = ParallelAnalysisMode.Off, Required = false, HelpText = "Off = parallel analysis off, On = parallel analysis on, Compare = runs two benchmarks with parallel analysis on and off")>]
+        ParallelAnalysis : ParallelAnalysisMode
     }
 
 let readSampleInput (sampleName : string) =
@@ -415,7 +419,7 @@ let run (args : Args) : unit =
         let case = prepareCase args
         
         use _ = LogContext.PushProperty("step", "PrepareAndRun")
-        prepareAndRun config case args.DryRun args.Cleanup args.Iterations args.Warmups args.TestParallelAnalysis versions
+        prepareAndRun config case args.DryRun args.Cleanup args.Iterations args.Warmups args.RecordOtelJaeger args.ParallelAnalysis versions
     with ex ->
         if args.Verbose then
             log.Fatal(ex, "Failure.")
