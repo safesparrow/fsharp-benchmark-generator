@@ -3,6 +3,8 @@
 open System
 open System.Collections.Generic
 open System.IO
+open System.IO.Compression
+open System.Text.RegularExpressions
 open System.Threading
 open BenchmarkDotNet.Analysers
 open BenchmarkDotNet.Configs
@@ -24,6 +26,50 @@ open NuGet.Versioning
 open OpenTelemetry
 open OpenTelemetry.Resources
 open OpenTelemetry.Trace
+
+
+type DisposableTempDir() =
+    let path = Path.GetTempFileName()
+    do
+        File.Delete(path)
+    let dir = Directory.CreateDirectory(path)
+    
+    interface IDisposable with
+        member _.Dispose() =
+            if dir.Exists then
+                try
+                    dir.Delete()
+                with e -> printfn $"Failed to delete temp directory {dir.FullName}"
+    
+    member this.Dir = dir
+
+let copyDirContents sourceDir targetDir =
+    Directory.EnumerateFiles(sourceDir)
+    |> Seq.iter (fun sourceFile ->
+        File.Copy(sourceFile, Path.Combine(targetDir, Path.GetFileName(sourceFile)))
+    )
+
+let time = ((DateTimeOffset)DateTime.Now).ToUnixTimeSeconds()
+let mutable nugetCounter = 1
+let createHackedNugetSourceDir (dir : string) =
+    let copy = new DisposableTempDir()
+    copyDirContents dir copy.Dir.FullName
+    let nupkg =
+        copy.Dir.EnumerateFiles($"FSharp.Compiler.Service.*.nupkg")
+        |> Seq.exactlyOne
+    use c = new DisposableTempDir()
+    ZipFile.ExtractToDirectory(nupkg.FullName, c.Dir.FullName)
+    let nuspec = Path.Combine(c.Dir.FullName, "FSharp.Compiler.Service.nuspec")
+    let text = File.ReadAllText(nuspec)
+    let newVersion = $"1000.{time}.{nugetCounter}"
+    let replaced = Regex.Replace(text, "<version>.+</version>", $"<version>{newVersion}</version>")
+    nugetCounter <- nugetCounter + 1
+    File.WriteAllText(nuspec, replaced)
+    nupkg.Delete()
+    ZipFile.CreateFromDirectory(c.Dir.FullName, nupkg.FullName)
+    printfn $"Hacked NuGet source dir from {dir} to {copy.Dir.FullName}"
+    copy.Dir, newVersion
+
 
 [<MemoryDiagnoser>]
 type Benchmark () =
@@ -61,6 +107,7 @@ type Benchmark () =
     
     static member InputEnvironmentVariable = "FcsBenchmarkInput"
     static member OtelEnvironmentVariable = "FcsBenchmarkRecordOtelJaeger"
+    static member ParallelProjectsAnalysisEnvironmentVariable = "FCS_PARALLEL_PROJECTS_ANALYSIS"
         
     member _.SetupTelemetry() =
         let useTracing =
@@ -70,6 +117,7 @@ type Benchmark () =
         
         tracerProvider <-
             if useTracing then
+                printfn "USING TRACING"
                 Sdk.CreateTracerProviderBuilder()
                    .AddSource("fsc")
                    .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService(serviceName="program", serviceVersion = "42.42.42.44"))
@@ -184,8 +232,15 @@ module NuGet =
                 failwith $"Could not find nupkg files with sourceDir='{sourceDir}.'\n\
                                Attempted the following candidate directories:\n\
                                {candidateDirsString}"
-            | head :: _ -> head
-       
+            | head :: _ ->
+                let source = head[0].PackageSource.LocalPath
+                let source, version = createHackedNugetSourceDir source
+                head
+                |> List.map (fun ref ->
+                    let version = match ref.PackageName with "FSharp.Compiler.Service" -> version | _ -> ref.PackageVersion
+                    NuGetReference(ref.PackageName, version, Uri(source.FullName), ref.Prerelease)
+                )
+                
     let makeReference (version : NuGetFCSVersion) =
         match version with
         | NuGetFCSVersion.Official version -> officialNuGet version
@@ -214,6 +269,8 @@ type RunnerArgs =
         RecordOtelJaeger : bool
         [<Option("parallel-analysis", Default = ParallelAnalysisMode.Off, Required = false, HelpText = "Off = parallel analysis off, On = parallel analysis on, Compare = runs two benchmarks with parallel analysis on and off")>]
         ParallelAnalysis : ParallelAnalysisMode
+        [<Option("gc", Default = GCMode.Workstation, Required = false, HelpText = "Whether to use 'workstation' or 'server' GC, or 'compare'.")>]
+        GCMode : GCMode
     }
 
 let private makeConfig (versions : NuGetFCSVersion list) (args : RunnerArgs) : IConfig =
@@ -224,22 +281,40 @@ let private makeConfig (versions : NuGetFCSVersion list) (args : RunnerArgs) : I
     let inputs = args.Input |> Seq.toList
     let parallelAnalysisModes =
         match args.ParallelAnalysis with
-        | ParallelAnalysisMode.Off -> [ParallelAnalysisMode.Off]
-        | ParallelAnalysisMode.On -> [ParallelAnalysisMode.On]
-        | ParallelAnalysisMode.Compare -> [ParallelAnalysisMode.Off; ParallelAnalysisMode.On]
+        | ParallelAnalysisMode.Off -> [false]
+        | ParallelAnalysisMode.On -> [true]
+        | ParallelAnalysisMode.Compare -> [true; false]
         | unknown -> failwith $"Unrecognised value of 'parallelAnalysisMode': {unknown}"
+    
+    let gcModes =
+        match args.GCMode with
+        | GCMode.Workstation -> [GCMode.Workstation]
+        | GCMode.Server -> [GCMode.Server]
+        | GCMode.Compare -> [GCMode.Server; GCMode.Workstation]
+        | unknown -> failwith $"Unrecognised value of 'gcMode': {unknown}"
         
-    let combinations = List.allPairs (List.allPairs inputs versions) parallelAnalysisModes
+    let versionsSources =
+        versions
+        |> List.map (fun version ->
+            let versionName = match version with NuGetFCSVersion.Official v -> v | NuGetFCSVersion.Local source -> source
+            let refs = NuGet.makeReferenceList version
+            versionName, refs
+        )
+        
+    let combinations = List.allPairs (List.allPairs (List.allPairs inputs versionsSources) parallelAnalysisModes) gcModes
     let jobs =
         combinations
         |> List.mapi (
-            fun i ((input, version), parallelAnalysisMode) ->
-                let versionName = match version with NuGetFCSVersion.Official v -> v | NuGetFCSVersion.Local source -> source
-                let jobName = $"{input}__{version}"
+            fun i (((input, (versionName, refs)), parallelAnalysisMode), gcMode) ->
+                let useServerGc = gcMode = GCMode.Server
+                let jobName = $"{input}_fcs={versionName}_parallel={parallelAnalysisMode}_serverGc={useServerGc}"
                 let job =
                     baseJob
-                        .WithNuGet(NuGet.makeReferenceList version)
+                        .WithNuGet(refs)
                         .WithEnvironmentVariable(Benchmark.InputEnvironmentVariable, input)
+                        .WithEnvironmentVariable(Benchmark.ParallelProjectsAnalysisEnvironmentVariable, parallelAnalysisMode.ToString())
+                        .WithEnvironmentVariable(Benchmark.OtelEnvironmentVariable, if args.RecordOtelJaeger then "true" else "false")
+                        .WithGcServer(useServerGc)
                         .WithId(jobName)
                 job
         )
@@ -299,7 +374,6 @@ let runManual args =
     for input in args.Input do
         Environment.SetEnvironmentVariable(Benchmark.InputEnvironmentVariable, input)
         Environment.SetEnvironmentVariable(Benchmark.OtelEnvironmentVariable, if args.RecordOtelJaeger then "true" else "false")
-        
         let n = [1]
         let sleep = [0]
         let mode = [Mode.Sequential]//; Mode.Sequential]

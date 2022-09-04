@@ -117,3 +117,8 @@ type ParallelAnalysisMode =
     | Off = 0
     | On = 1
     | Compare = 2
+    
+type GCMode =
+    | Workstation = 0
+    | Server = 1
+    | Compare = 2

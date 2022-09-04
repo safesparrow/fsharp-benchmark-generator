@@ -16,6 +16,7 @@
 
     <ItemGroup>
         <PackageReference Include="FSharp.Compiler.Service" Version="40.0.0" />
+        <PackageReference Include="NuGet.Packaging" Version="6.3.0" />
 <!--      <Reference Include="FSharp.Compiler.Service">-->
 <!--        <HintPath>c:/projekty/fsharp/fsharp-otel\artifacts\bin\FSharp.Compiler.Service\Release\netstandard2.0\FSharp.Compiler.Service.dll</HintPath>-->
 <!--      </Reference>-->

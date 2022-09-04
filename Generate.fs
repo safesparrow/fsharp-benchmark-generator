@@ -198,6 +198,13 @@ let private readJsonResultsSummary (bdnArtifactsDir : string) (benchmarkClass : 
     let jObject = JsonConvert.DeserializeObject<JObject>(json)
     extractResultsFromJson jObject
 
+let copyDir sourceDir targetDir =
+    Directory.CreateDirectory(targetDir) |> ignore
+    Directory.EnumerateFiles(sourceDir)
+    |> Seq.iter (fun sourceFile ->
+        File.Copy(sourceFile, Path.Combine(targetDir, Path.GetFileName(sourceFile)))
+    )
+
 let rec copyRunnerProjectFilesToTemp (sourceDir : string) =
     let buildDir =
         let file = Path.GetTempFileName()
@@ -233,7 +240,18 @@ type DisposableTempDir() =
     
     member this.Dir = dir
 
-let private prepareAndRun (config : Config) (case : BenchmarkCase) (dryRun : bool) (cleanup : bool) (iterations : int) (warmups : int) (recordOtelJaeger : bool) (parallelAnalysisMode : ParallelAnalysisMode) (versions : NuGetFCSVersion list) =
+let private prepareAndRun
+    (config : Config)
+    (case : BenchmarkCase)
+    (dryRun : bool)
+    (cleanup : bool)
+    (iterations : int)
+    (warmups : int)
+    (recordOtelJaeger : bool)
+    (parallelAnalysisMode : ParallelAnalysisMode)
+    (gcMode : GCMode)
+    (versions : NuGetFCSVersion list)
+    =
     let codebase = prepareCodebase config case
     let inputs = generateInputs case codebase.Path
     let inputsPath = makeInputsPath codebase.Path
@@ -252,7 +270,7 @@ let private prepareAndRun (config : Config) (case : BenchmarkCase) (dryRun : boo
                 "DOTNET_ROOT_X64", ""
                 // Avoid caching NuGet packages by the benchmark by using a temp directory.
                 // Otherwise newer versions of locally-built FCS might be shadowed by older versions
-                "NUGET_PACKAGES", nugetPackagesDir.Dir.FullName
+                // "NUGET_PACKAGES", nugetPackagesDir.Dir.FullName
             ]
         let envVariables = emptyProjInfoEnvironmentVariables() @ extraEnvVariables
         let bdnArtifactsDir = Path.Combine(Environment.CurrentDirectory, "BenchmarkDotNet.Artifacts")
@@ -274,8 +292,9 @@ let private prepareAndRun (config : Config) (case : BenchmarkCase) (dryRun : boo
             o + " " + l
         let otelStr = $"--record-otel-jaeger={recordOtelJaeger}"
         let parallelAnalysisStr = $"--parallel-analysis={parallelAnalysisMode}"
+        let gcModeStr = $"--gc={gcMode}"
         let artifactsPath = Path.Combine(Environment.CurrentDirectory, "FCSBenchmark.Artifacts")
-        let args = $"run -c Release -- --artifacts-path={artifactsPath} --input={inputsPath} --iterations={iterations} --warmups={warmups} {otelStr} {parallelAnalysisStr} {versionsArgs}".Trim()
+        let args = $"run -c Release -- --artifacts-path={artifactsPath} --input={inputsPath} --iterations={iterations} --warmups={warmups} {otelStr} {parallelAnalysisStr} {gcModeStr} {versionsArgs}".Trim()
         log.Information(
             "Starting the benchmark:\n\
              - Full BDN output can be found in {artifactFiles}.\n\
@@ -322,6 +341,8 @@ type Args =
         RecordOtelJaeger : bool
         [<Option("parallel-analysis", Default = ParallelAnalysisMode.Off, Required = false, HelpText = "Off = parallel analysis off, On = parallel analysis on, Compare = runs two benchmarks with parallel analysis on and off")>]
         ParallelAnalysis : ParallelAnalysisMode
+        [<Option("gc", Default = GCMode.Workstation, Required = false, HelpText = "Whether to use 'workstation' or 'server' GC, or 'compare'.")>]
+        GCMode : GCMode
     }
 
 let readSampleInput (sampleName : string) =
@@ -419,7 +440,7 @@ let run (args : Args) : unit =
         let case = prepareCase args
         
         use _ = LogContext.PushProperty("step", "PrepareAndRun")
-        prepareAndRun config case args.DryRun args.Cleanup args.Iterations args.Warmups args.RecordOtelJaeger args.ParallelAnalysis versions
+        prepareAndRun config case args.DryRun args.Cleanup args.Iterations args.Warmups args.RecordOtelJaeger args.ParallelAnalysis args.GCMode versions
     with ex ->
         if args.Verbose then
             log.Fatal(ex, "Failure.")
