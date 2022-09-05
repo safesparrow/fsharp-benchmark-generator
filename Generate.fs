@@ -290,16 +290,23 @@ let private prepareAndRun
                 | locals ->
                     "--local " + String.Join(" ", locals |> List.map (fun local -> local.TrimEnd([|'\\'; '/'|])))
             o + " " + l
-        let otelStr = $"--record-otel-jaeger={recordOtelJaeger}"
+        let otelStr = if recordOtelJaeger then "--record-otel-jaeger" else ""
         let parallelAnalysisStr = $"--parallel-analysis={parallelAnalysisMode}"
         let gcModeStr = $"--gc={gcMode}"
         let artifactsPath = Path.Combine(Environment.CurrentDirectory, "FCSBenchmark.Artifacts")
         let args = $"run -c Release -- --artifacts-path={artifactsPath} --input={inputsPath} --iterations={iterations} --warmups={warmups} {otelStr} {parallelAnalysisStr} {gcModeStr} {versionsArgs}".Trim()
+        let env =
+            envVariables
+            |> List.filter (fun (key, value) -> String.IsNullOrEmpty(value) = false)
+            |> List.map (fun (key, value) -> $"{key}={value}")
+            |> fun x -> String.Join(" ", x)
         log.Information(
             "Starting the benchmark:\n\
              - Full BDN output can be found in {artifactFiles}.\n\
              - Full commandline: '{exe} {args}'\n\
-             - Working directory: '{dir}'.", $"{bdnArtifactsDir}/*.log", exe, args, workingDir)
+             - Working directory: '{dir}'.", $"{bdnArtifactsDir}/*.log\n\
+             - Extra environment variables: {env}"
+             , exe, args, workingDir)
         Utils.runProcess exe args workingDir envVariables LogEventLevel.Information
     else
         log.Information("Not running the benchmark as requested")

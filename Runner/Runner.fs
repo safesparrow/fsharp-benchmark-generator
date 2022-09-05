@@ -120,13 +120,12 @@ type Benchmark () =
                 Sdk.CreateTracerProviderBuilder()
                    .AddSource("fsc")
                    .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService(serviceName="program", serviceVersion = "42.42.42.44"))
-                   .AddJaegerExporter()
-                   // .AddJaegerExporter(fun c ->
-                   //     c.BatchExportProcessorOptions.MaxQueueSize <- 10000000
-                   //     c.BatchExportProcessorOptions.MaxExportBatchSize <- 10000000
-                   //     c.ExportProcessorType <- ExportProcessorType.Simple
-                   //     //c.MaxPayloadSizeInBytes <- Nullable(1000000000)
-                   //  )
+                   .AddJaegerExporter(fun c ->
+                       // c.BatchExportProcessorOptions.MaxQueueSize <- 10000000
+                       // c.BatchExportProcessorOptions.MaxExportBatchSize <- 10000000
+                       c.ExportProcessorType <- ExportProcessorType.Simple
+                       //c.MaxPayloadSizeInBytes <- Nullable(1000000000)
+                    )
                    .Build()
                 |> Some
             else
