@@ -1,10 +1,10 @@
-# FCSBenchmark.Generator
+# FCSBenchmark
 
 ![GitHub Workflow Status](https://img.shields.io/github/workflow/status/safesparrow/fsharp-benchmark-generator/.NET)
 ![Nuget (with prereleases)](https://img.shields.io/nuget/vpre/fcsbenchmark)
 
 ## What is it
-A command-line app for generating and running benchmarks of FCS using high-level analysis definitions
+FCSBenchmark is a command-line app for generating and running benchmarks of FSharp.Compiler.Service (FCS) using high-level analysis definitions.
 
 Its goal is to make it easy to run FCS benchmarks that are:
 * high-level
