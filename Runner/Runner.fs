@@ -142,7 +142,7 @@ type Benchmark() =
                         c.BatchExportProcessorOptions.MaxQueueSize <- 10000000
                         c.BatchExportProcessorOptions.MaxExportBatchSize <- 10000000
                         c.ExportProcessorType <- ExportProcessorType.Simple
-                        c.MaxPayloadSizeInBytes <- Nullable(1000000000)
+                        c.MaxPayloadSizeInBytes <- Nullable (1000000000)
                     )
                     .Build ()
                 |> Some
