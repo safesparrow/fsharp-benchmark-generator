@@ -6,6 +6,7 @@
         <OutputType>exe</OutputType>
         <Configurations>Release</Configurations>
         <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
+        <WarningsAsErrors>FS0025</WarningsAsErrors>
     </PropertyGroup>
 
     <ItemGroup>

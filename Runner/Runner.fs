@@ -94,7 +94,7 @@ type Benchmark() =
         match action with
         | AnalyseFile x ->
             [ 1 .. x.Repeat ]
-            |> List.map (fun _ ->
+            |> List.iter (fun _ ->
                 let result, answer =
                     checker.ParseAndCheckFileInProject (
                         x.FileName,
@@ -109,7 +109,19 @@ type Benchmark() =
                 | FSharpCheckFileAnswer.Succeeded results ->
                     printDiagnostics results
                     cleanCaches checker
-                    action, (result, answer)
+            )
+        | BuildProject x ->
+            [ 1 .. x.Repeat ]
+            |> List.iter (fun _ ->
+                let diagnostics, exitCode = checker.Compile x.Args |> Async.RunSynchronously
+
+                if exitCode = 0 then
+                    cleanCaches checker
+                else
+                    for d in diagnostics do
+                        printfn $"- {d.Message}"
+
+                    failwith "compilation failed"
             )
 
     let mutable setup : (FSharpChecker * BenchmarkAction list) option = None

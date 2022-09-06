@@ -7,6 +7,7 @@
         <RunWorkingDirectory>$(MSBuildProjectDirectory)</RunWorkingDirectory>
         <Description>A tool for generating and running high-level benchmarks of the FSharp compiler service (FCS)</Description>
         <NoWarn>NU1608</NoWarn>
+        <WarningsAsErrors>FS0025</WarningsAsErrors>
 
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
         <PackageOutputPath>./nupkg</PackageOutputPath>
