@@ -373,7 +373,7 @@ let private makeConfig (versions : NuGetFCSVersion list) (args : RunnerArgs) : I
                     baseJob
                         .WithNuGet(refs)
                         .WithEnvironmentVariable(Benchmark.InputEnvironmentVariable, input)
-                        .WithEnvironmentVariable(Benchmark.ParallelProjectsAnalysisEnvironmentVariable, parallelAnalysisMode.ToString())
+                        .WithEnvironmentVariable(Benchmark.BenchmarkParallelProjectsAnalysisEnvironmentVariable, parallelAnalysisMode.ToString())
                         .WithEnvironmentVariable(Benchmark.OtelEnvironmentVariable, if args.RecordOtelJaeger then "true" else "false")
                         .WithGcServer(useServerGc)
                         .WithId(jobName)
