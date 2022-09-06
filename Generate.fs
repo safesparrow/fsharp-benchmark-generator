@@ -107,6 +107,7 @@ let private doLoadOptions (toolsPath : ToolsPath) (sln : string) =
     //let _ = Microsoft.Build.Locator.MSBuildLocator.RegisterDefaults()
     
     printfn "0002"; Thread.Sleep(500)
+    // TODO Reinstante withRedirectedConsole - was causing crashes with no logs and no reason.
     let projects =
         loader.LoadSln(sln, [], BinaryLogGeneration.Off) |> Seq.toList
     
