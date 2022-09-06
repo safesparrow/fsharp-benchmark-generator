@@ -19,6 +19,10 @@ jobs:
       uses: actions/setup-dotnet@v2
       with:
         dotnet-version: 6.0.x
+    - name: Restore tools
+      run: dotnet tool restore
+    - name: Check formatting
+      run: dotnet fantomas . -r --check
     - name: Restore dependencies
       run: dotnet restore ./FCSBenchmark.sln
     - name: Build
