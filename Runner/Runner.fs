@@ -304,7 +304,7 @@ let private makeConfig (versions : NuGetFCSVersion list) (args : RunnerArgs) : I
         |> List.mapi (
             fun i (((input, (versionName, refs)), parallelAnalysisMode), gcMode) ->
                 let useServerGc = gcMode = GCMode.Server
-                let jobName = $"fcs={versionName}_parallel={parallelAnalysisMode}_serverGc={useServerGc}"
+                let jobName = $"fcs={versionName}_input=#{i}_parallel={parallelAnalysisMode}_serverGc={useServerGc}"
                 let job =
                     baseJob
                         .WithNuGet(refs)
@@ -364,4 +364,9 @@ let main args =
     match result with
     | :? Parsed<RunnerArgs> as parsed ->
         runStandard parsed.Value
-    | _ -> failwith "Parse error"
+    | :? NotParsed<RunnerArgs> as notParsed ->
+        let errorsString =
+            notParsed.Errors
+            |> Seq.map (fun e -> e.ToString())
+            |> fun lines -> String.Join(Environment.NewLine, lines)
+        failwith $"Parse errors: {errorsString}"

@@ -3,9 +3,15 @@ module FCSBenchmark.Generator.Utils
 
 open System.Collections.Generic
 open System.Diagnostics
+open System.Threading
 open Serilog.Events
     
-let runProcess name args workingDir (envVariables : (string * string) list) (outputLogLevel : LogEventLevel) =
+let runProcess (name:string) (args:string) workingDir (envVariables : (string * string) list) (outputLogLevel : LogEventLevel) =
+    printfn $"Running '{name} {args}' in '{workingDir}'"
+    if args.Contains("run -c") then
+        printfn $"{args}"
+        Thread.Sleep(10000)
+        failwith $"{args}"
     let info = ProcessStartInfo()
     info.WindowStyle <- ProcessWindowStyle.Hidden
     info.Arguments <- args
@@ -20,6 +26,8 @@ let runProcess name args workingDir (envVariables : (string * string) list) (out
     |> List.iter (fun (k, v) -> info.EnvironmentVariables[k] <- v)
     
     log.Verbose("Running '{name} {args}' in '{workingDir}'", name, args, workingDir)
+    printfn $"Running '{name} {args}' in '{workingDir}'"
+    System.Threading.Thread.Sleep(1000)
     let p = new Process(StartInfo = info)
     p.EnableRaisingEvents <- true
     let output = List<string>()

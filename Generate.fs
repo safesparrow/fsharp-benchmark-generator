@@ -5,6 +5,7 @@ open System.IO
 open System.Reflection
 open System.Runtime.CompilerServices
 open System.Text.RegularExpressions
+open System.Threading
 open FCSBenchmark.Common.Dtos
 open CommandLine
 open FCSBenchmark.Generator.FCSCheckouts
@@ -49,7 +50,11 @@ type BenchmarkCase =
 let init (slnPath : string) =
     let directoryName = Path.GetDirectoryName slnPath
     log.Verbose("Calling {method} for directory {directory}", "Ionide.ProjInfo.Init.init", directoryName)
-    Init.init (DirectoryInfo(directoryName)) None
+    System.Threading.Thread.Sleep(100)
+    let path = Init.init (DirectoryInfo(directoryName)) None
+    log.Verbose("Finished init")
+    System.Threading.Thread.Sleep(1000)
+    path
 
 type Codebase =
     | Local of string
@@ -88,17 +93,24 @@ let private withRedirectedConsole<'a> (f : unit -> 'a) =
     Console.SetOut(originalError)
     res, (out.ToString(), error.ToString())
 
+let mutable private msbuildRegistered = false
+
+let registerMSBuild () =
+    Microsoft.Build.Locator.MSBuildLocator.RegisterDefaults() |> ignore
+
 [<MethodImpl(MethodImplOptions.NoInlining)>]
 let private doLoadOptions (toolsPath : ToolsPath) (sln : string) =
     // TODO allow customization of build properties
     let props = []
+    printfn "666"; Thread.Sleep(500)
     let loader = WorkspaceLoader.Create(toolsPath, props)
-    let _ = Microsoft.Build.Locator.MSBuildLocator.RegisterDefaults()
+    //let _ = Microsoft.Build.Locator.MSBuildLocator.RegisterDefaults()
     
-    let projects, _ =
-        fun () -> loader.LoadSln(sln, [], BinaryLogGeneration.Off) |> Seq.toList
-        |> withRedirectedConsole
-        
+    printfn "0002"; Thread.Sleep(500)
+    let projects =
+        loader.LoadSln(sln, [], BinaryLogGeneration.Off) |> Seq.toList
+    
+    printfn "4"; Thread.Sleep(500)
     log.Information("{projectsCount} projects loaded from {sln}", projects.Length, sln)
     if projects.Length = 0 then
         failwith $"No projects were loaded from {sln} - this indicates an error in cracking the projects"
@@ -118,6 +130,7 @@ let private loadOptions (sln : string) =
     use _ = LogContext.PushProperty("step", "LoadOptions")
     log.Verbose("Constructing FSharpProjectOptions from {sln}", sln)
     let toolsPath = init sln
+    printfn "236523"; Thread.Sleep(500)
     doLoadOptions toolsPath sln
 
 let private generateInputs (case : BenchmarkCase) (codeRoot : string) =
@@ -242,7 +255,7 @@ type DisposableTempDir() =
 
 let private prepareAndRun
     (config : Config)
-    (case : BenchmarkCase)
+    (cases : BenchmarkCase list)
     (dryRun : bool)
     (cleanup : bool)
     (iterations : int)
@@ -252,13 +265,18 @@ let private prepareAndRun
     (gcMode : GCMode)
     (versions : NuGetFCSVersion list)
     =
-    let codebase = prepareCodebase config case
-    let inputs = generateInputs case codebase.Path
-    let inputsPath = makeInputsPath codebase.Path
-    log.Information("Serializing inputs as {inputsPath}", inputsPath)        
-    let serialized = serializeInputs inputs
-    Directory.CreateDirectory(Path.GetDirectoryName(inputsPath)) |> ignore
-    File.WriteAllText(inputsPath, serialized)
+    let inputs =
+        cases
+        |> List.map (fun case ->
+            let codebase = prepareCodebase config case
+            let inputs = generateInputs case codebase.Path
+            let inputsPath = makeInputsPath codebase.Path
+            log.Information("Serializing inputs as {inputsPath}", inputsPath)        
+            let serialized = serializeInputs inputs
+            Directory.CreateDirectory(Path.GetDirectoryName(inputsPath)) |> ignore
+            File.WriteAllText(inputsPath, serialized)
+            inputsPath, codebase
+        )
     
     if dryRun = false then
         use _ = LogContext.PushProperty("step", "Run")
@@ -290,11 +308,15 @@ let private prepareAndRun
                 | locals ->
                     "--local " + String.Join(" ", locals |> List.map (fun local -> local.TrimEnd([|'\\'; '/'|])))
             o + " " + l
+        let inputsArgs =
+            inputs
+            |> List.map fst
+            |> fun paths -> "--input " + String.Join(" ", paths)
         let otelStr = if recordOtelJaeger then "--record-otel-jaeger" else ""
         let parallelAnalysisStr = $"--parallel-analysis={parallelAnalysisMode}"
         let gcModeStr = $"--gc={gcMode}"
         let artifactsPath = Path.Combine(Environment.CurrentDirectory, "FCSBenchmark.Artifacts")
-        let args = $"run -c Release -- --artifacts-path={artifactsPath} --input={inputsPath} --iterations={iterations} --warmups={warmups} {otelStr} {parallelAnalysisStr} {gcModeStr} {versionsArgs}".Trim()
+        let args = $"run -c Release -- --artifacts-path={artifactsPath} {inputsArgs} --iterations={iterations} --warmups={warmups} {otelStr} {parallelAnalysisStr} {gcModeStr} {versionsArgs}".Trim()
         let env =
             envVariables
             |> List.filter (fun (key, value) -> String.IsNullOrEmpty(value) = false)
@@ -310,24 +332,34 @@ let private prepareAndRun
         Utils.runProcess exe args workingDir envVariables LogEventLevel.Information
     else
         log.Information("Not running the benchmark as requested")
+    
+    if cleanup then
+        let gitCodebases =
+            inputs
+            |> List.map snd
+            |> List.choose (function Git repo -> Some repo | _ -> None)
         
-    match codebase, cleanup with
-    | Local _, _ -> ()
-    | Git _, false -> ()
-    | Git repo, true ->
-        log.Information("Cleaning up checked out git repo {repoPath} as requested", repo.Info.Path)
-        Directory.Delete repo.Info.Path
+        match gitCodebases with
+        | [] -> ()
+        | gitCodebases ->
+            log.Information("Cleaning up checked out git repos as requested:")
+            gitCodebases
+            |> List.iter (fun codebase ->
+                let path = codebase.Info.Path
+                log.Information($"- {path}")
+                Directory.Delete path
+            )
 
 type Args =
     {
         [<CommandLine.Option('c', "checkouts", Default = ".artifacts", HelpText = "Base directory for git checkouts")>]
         CheckoutsDir : string
-        [<CommandLine.Option("forceFcsBuild", Default = false, HelpText = "Force build git-sourced FCS versions even if the binaries already exist")>]
+        [<CommandLine.Option("forceFcsBuild", Default = false, HelpText = "Force-build git-sourced FCS versions even if the binaries already exist")>]
         ForceFCSBuild : bool
-        [<CommandLine.Option('i', SetName = "input", HelpText = "Path to the input file describing the benchmark.")>]
-        Input : string
-        [<CommandLine.Option("sample", SetName = "input", HelpText = "Use a predefined sample benchmark with the given name")>]
-        SampleInput : string
+        [<CommandLine.Option('i', SetName = "input", HelpText = "Path to the input file describing the benchmark. Supports multiple values.")>]
+        Input : string seq
+        [<CommandLine.Option("sample", SetName = "input", HelpText = "Use a predefined sample benchmark with the given name. Supports multiple values.")>]
+        SampleInput : string seq
         [<CommandLine.Option("dry-run", HelpText = "If set, prepares the benchmark and prints the commandline to run it, then exits")>]
         DryRun : bool
         [<CommandLine.Option(Default = false, HelpText = "If set, removes the checkout directory afterwards. Doesn't apply to local codebases")>]
@@ -369,33 +401,39 @@ let readSampleInput (sampleName : string) =
         else
             failwith $"Samples directory '{dir}' does not exist"
 
-let prepareCase (args : Args) : BenchmarkCase =
+let prepareCases (args : Args) : BenchmarkCase list =
     use _ = LogContext.PushProperty("step", "Read input")
     try
-        let path =
-            match args.Input |> Option.ofObj, args.SampleInput |> Option.ofObj with
-            | None, None -> failwith $"No input specified"
-            | Some input, _ -> input
-            | None, Some sample -> readSampleInput sample
+        let paths =
+            let regular = args.Input |> Seq.toList
+            let samples = args.SampleInput |> Seq.map readSampleInput |> Seq.toList
+            let paths = samples @ regular
+            match paths with
+            | [] -> failwith $"No input specified"
+            | paths -> paths
                     
-        log.Verbose("Read and deserialize inputs from {path}", path)
-        path
-        |> File.ReadAllText
-        |> JsonConvert.DeserializeObject<BenchmarkCase>
-        |> fun case ->
-                let defaultCodebasePrep =
-                    [
-                        {
-                            CodebasePrepStep.Command = "dotnet"
-                            CodebasePrepStep.Args = $"msbuild /t:Restore /p:RestoreUseStaticGraphEvaluation=true {case.SlnRelative}"
-                        }
-                    ]
-                let codebasePrep =
-                    match obj.ReferenceEquals(case.CodebasePrep, null) with
-                    | true -> defaultCodebasePrep
-                    | false -> case.CodebasePrep
+        let pathsString = paths |> List.map (fun path -> $"- {path}") |> fun l -> String.Join(Environment.NewLine, l)
+        log.Verbose("Read and deserialize inputs from {count} paths: " + Environment.NewLine + pathsString, paths.Length)
+        paths
+        |> List.map (fun path ->
+                path
+                |> File.ReadAllText
+                |> JsonConvert.DeserializeObject<BenchmarkCase>
+                |> fun case ->
+                        let defaultCodebasePrep =
+                            [
+                                {
+                                    CodebasePrepStep.Command = "dotnet"
+                                    CodebasePrepStep.Args = $"msbuild /t:Restore /p:RestoreUseStaticGraphEvaluation=true {case.SlnRelative}"
+                                }
+                            ]
+                        let codebasePrep =
+                            match obj.ReferenceEquals(case.CodebasePrep, null) with
+                            | true -> defaultCodebasePrep
+                            | false -> case.CodebasePrep
                 
-                { case with CodebasePrep = codebasePrep }
+                        { case with CodebasePrep = codebasePrep }
+        )
     with e ->
         let msg = $"Failed to read inputs file: {e.Message}"
         log.Fatal(msg)
@@ -430,6 +468,7 @@ let prepareFCSVersions (config : Config) (raw : FCSVersionsArgs) =
         | versions -> versions
 
 let run (args : Args) : unit =
+    registerMSBuild()
     log <- LoggerConfiguration().Enrich.FromLogContext()
                .WriteTo.Console(outputTemplate = "[{Timestamp:HH:mm:ss} {Level:u3}] {step:j}: {Message:lj}{NewLine}{Exception}")
                .MinimumLevel.Is(if args.Verbose then LogEventLevel.Verbose else LogEventLevel.Information)
@@ -444,10 +483,10 @@ let run (args : Args) : unit =
         
         let rawVersions = { Official = args.OfficialVersions |> Seq.toList; Local = args.LocalNuGetSourceDirs |> Seq.toList; Git = args.GitHubVersions |> Seq.toList }
         let versions = prepareFCSVersions config rawVersions
-        let case = prepareCase args
+        let cases = prepareCases args
         
         use _ = LogContext.PushProperty("step", "PrepareAndRun")
-        prepareAndRun config case args.DryRun args.Cleanup args.Iterations args.Warmups args.RecordOtelJaeger args.ParallelAnalysis args.GCMode versions
+        prepareAndRun config cases args.DryRun args.Cleanup args.Iterations args.Warmups args.RecordOtelJaeger args.ParallelAnalysis args.GCMode versions
     with ex ->
         if args.Verbose then
             log.Fatal(ex, "Failure.")
@@ -457,7 +496,11 @@ let run (args : Args) : unit =
 [<EntryPoint>]
 [<MethodImpl(MethodImplOptions.NoInlining)>]
 let main args =
-    let parseResult = Parser.Default.ParseArguments<Args> args
-    parseResult.WithParsed(run)
-    |> ignore    
-    if parseResult.Tag = ParserResultType.Parsed then 0 else 1
+    try
+        let parseResult = Parser.Default.ParseArguments<Args> args
+        parseResult.WithParsed(run)
+        |> ignore    
+        if parseResult.Tag = ParserResultType.Parsed then 0 else 1
+    with ex ->
+        log.Error(ex, "ex")
+        1
