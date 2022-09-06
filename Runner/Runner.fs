@@ -275,7 +275,7 @@ let private makeConfig (versions : NuGetFCSVersion list) (args : RunnerArgs) : I
         Job.ShortRun
             .WithWarmupCount(args.Warmups)
             .WithIterationCount(args.Iterations)
-    let inputs = args.Input |> Seq.toList
+    let inputs = args.Input |> Seq.toList |> List.mapi (fun i x -> i, x)
     let parallelAnalysisModes =
         match args.ParallelAnalysis with
         | ParallelAnalysisMode.Off -> [false]
@@ -302,9 +302,9 @@ let private makeConfig (versions : NuGetFCSVersion list) (args : RunnerArgs) : I
     let jobs =
         combinations
         |> List.mapi (
-            fun i (((input, (versionName, refs)), parallelAnalysisMode), gcMode) ->
+            fun i ((((inputIdx, input), (versionName, refs)), parallelAnalysisMode), gcMode) ->
                 let useServerGc = gcMode = GCMode.Server
-                let jobName = $"fcs={versionName}_input=#{i}_parallel={parallelAnalysisMode}_serverGc={useServerGc}"
+                let jobName = $"fcs={versionName}_input=#{inputIdx}_parallel={parallelAnalysisMode}_serverGc={useServerGc}"
                 let job =
                     baseJob
                         .WithNuGet(refs)
