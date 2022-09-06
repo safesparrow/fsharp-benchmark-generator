@@ -107,7 +107,7 @@ type Benchmark () =
     
     static member InputEnvironmentVariable = "FcsBenchmarkInput"
     static member OtelEnvironmentVariable = "FcsBenchmarkRecordOtelJaeger"
-    static member ParallelProjectsAnalysisEnvironmentVariable = "FCS_PARALLEL_PROJECTS_ANALYSIS"
+    static member BenchmarkParallelProjectsAnalysisEnvironmentVariable = "FcsBenchmarkParallelProjectsAnalysis"
         
     member _.SetupTelemetry() =
         let useTracing =
@@ -139,8 +139,25 @@ type Benchmark () =
         else
             failwith $"Input file '{inputFile}' does not exist"
     
+    static member ParallelAnalysisParamsSource =
+        let v = Environment.GetEnvironmentVariable(Benchmark.BenchmarkParallelProjectsAnalysisEnvironmentVariable)
+        match Enum.TryParse<ParallelAnalysisMode>(v) with
+        | true, mode ->
+            match mode with
+            | ParallelAnalysisMode.Off -> [false]
+            | ParallelAnalysisMode.On -> [true]
+            | ParallelAnalysisMode.Compare -> [true; false]
+            | unknown -> failwith $"Unrecognised value of 'parallelAnalysisMode': {unknown}"
+        | false, _ ->
+            [false]
+    
+    [<ParamsSource(nameof(Benchmark.ParallelAnalysisParamsSource))>]
+    member val ParallelAnalysis : bool = false with get, set
+    
     [<GlobalSetup>]
     member this.Setup() =
+        let parallelProjectsAnalysisEnvironmentVariable = "FCS_PARALLEL_PROJECTS_ANALYSIS"
+        Environment.SetEnvironmentVariable(parallelProjectsAnalysisEnvironmentVariable, this.ParallelAnalysis.ToString())
         let inputFile = Environment.GetEnvironmentVariable(Benchmark.InputEnvironmentVariable)
         if File.Exists(inputFile) then
             let inputs = Benchmark.ReadInput(inputFile)
@@ -276,13 +293,7 @@ let private makeConfig (versions : NuGetFCSVersion list) (args : RunnerArgs) : I
             .WithWarmupCount(args.Warmups)
             .WithIterationCount(args.Iterations)
     let inputs = args.Input |> Seq.toList
-    let parallelAnalysisModes =
-        match args.ParallelAnalysis with
-        | ParallelAnalysisMode.Off -> [false]
-        | ParallelAnalysisMode.On -> [true]
-        | ParallelAnalysisMode.Compare -> [true; false]
-        | unknown -> failwith $"Unrecognised value of 'parallelAnalysisMode': {unknown}"
-    
+
     let gcModes =
         match args.GCMode with
         | GCMode.Workstation -> [GCMode.Workstation]
@@ -298,18 +309,18 @@ let private makeConfig (versions : NuGetFCSVersion list) (args : RunnerArgs) : I
             versionName, refs
         )
         
-    let combinations = List.allPairs (List.allPairs (List.allPairs inputs versionsSources) parallelAnalysisModes) gcModes
+    let combinations = List.allPairs (List.allPairs inputs versionsSources) gcModes
     let jobs =
         combinations
         |> List.mapi (
-            fun i (((input, (versionName, refs)), parallelAnalysisMode), gcMode) ->
+            fun i ((input, (versionName, refs)), gcMode) ->
                 let useServerGc = gcMode = GCMode.Server
-                let jobName = $"fcs={versionName}_parallel={parallelAnalysisMode}_serverGc={useServerGc}"
+                let jobName = $"fcs={versionName}_serverGc={useServerGc}"
                 let job =
                     baseJob
                         .WithNuGet(refs)
                         .WithEnvironmentVariable(Benchmark.InputEnvironmentVariable, input)
-                        .WithEnvironmentVariable(Benchmark.ParallelProjectsAnalysisEnvironmentVariable, parallelAnalysisMode.ToString())
+                        .WithEnvironmentVariable(Benchmark.BenchmarkParallelProjectsAnalysisEnvironmentVariable, args.ParallelAnalysis.ToString())
                         .WithEnvironmentVariable(Benchmark.OtelEnvironmentVariable, if args.RecordOtelJaeger then "true" else "false")
                         .WithGcServer(useServerGc)
                         .WithId(jobName)

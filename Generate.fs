@@ -113,6 +113,12 @@ let private doLoadOptions (toolsPath : ToolsPath) (sln : string) =
     )
     |> dict
 
+/// Not a bulletproof way to get an absolute path from a possibly relative one
+let toAbsolutePath (baseDir : string) (path : string) =
+    if Path.IsPathRooted(path) then path
+    else
+        Path.Combine(baseDir, path)
+
 [<MethodImpl(MethodImplOptions.NoInlining)>]
 let private loadOptions (sln : string) =
     use _ = LogContext.PushProperty("step", "LoadOptions")
@@ -253,8 +259,10 @@ let private prepareAndRun
     (versions : NuGetFCSVersion list)
     =
     let codebase = prepareCodebase config case
-    let inputs = generateInputs case codebase.Path
-    let inputsPath = makeInputsPath codebase.Path
+    let binDir = Path.GetDirectoryName(Assembly.GetAssembly(typeof<BenchmarkCase>).Location)
+    let absoluteCodebasePath = toAbsolutePath binDir codebase.Path
+    let inputs = generateInputs case absoluteCodebasePath
+    let inputsPath = makeInputsPath absoluteCodebasePath
     log.Information("Serializing inputs as {inputsPath}", inputsPath)        
     let serialized = serializeInputs inputs
     Directory.CreateDirectory(Path.GetDirectoryName(inputsPath)) |> ignore
@@ -267,10 +275,8 @@ let private prepareAndRun
         use nugetPackagesDir = new DisposableTempDir()
         let extraEnvVariables =
             [
+                // Clear variables set by 'dotnet' that affect the runner
                 "DOTNET_ROOT_X64", ""
-                // Avoid caching NuGet packages by the benchmark by using a temp directory.
-                // Otherwise newer versions of locally-built FCS might be shadowed by older versions
-                // "NUGET_PACKAGES", nugetPackagesDir.Dir.FullName
             ]
         let envVariables = emptyProjInfoEnvironmentVariables() @ extraEnvVariables
         let bdnArtifactsDir = Path.Combine(Environment.CurrentDirectory, "BenchmarkDotNet.Artifacts")

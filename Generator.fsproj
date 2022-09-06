@@ -38,8 +38,11 @@
     
     <ItemGroup>
         <!-- Copied for use in Runner -->
-        <None Include="Runner\*.*" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="Runner/*.*" CopyToOutputDirectory="PreserveNewest" />
         <None Include="inputs/*.json" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="MinimalSample/*.fs" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="MinimalSample/*.fsproj" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="MinimalSample/*.sln" CopyToOutputDirectory="PreserveNewest" />
         <None Include=".gitignore" />
         <None Include="README.md" />
         <Content Include="version.json" />
