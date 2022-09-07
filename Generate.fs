@@ -243,7 +243,7 @@ let rec copyRunnerProjectFilesToTemp (sourceDir : string) =
     try
         Directory.CreateDirectory (buildDir) |> ignore
 
-        for dirName in [ "Runner" ; "Serialisation" ] do
+        for dirName in [ "Runner" ; "Serialisation" ; "BDNExtensions" ] do
             let sourceDir = Path.Combine (sourceDir, dirName)
             let targetDir = Path.Combine (buildDir, dirName)
             Directory.CreateDirectory (targetDir) |> ignore

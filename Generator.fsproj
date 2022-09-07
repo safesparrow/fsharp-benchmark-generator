@@ -39,6 +39,8 @@
     <ItemGroup>
         <!-- Copied for use in Runner -->
         <None Include="Runner/*.*" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="Runner/*.*" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="BDNExtensions/*.*" CopyToOutputDirectory="PreserveNewest" />
         <None Include="inputs/*.json" CopyToOutputDirectory="PreserveNewest" />
         <None Include="MinimalSample/*.fs" CopyToOutputDirectory="PreserveNewest" />
         <None Include="MinimalSample/*.fsproj" CopyToOutputDirectory="PreserveNewest" />

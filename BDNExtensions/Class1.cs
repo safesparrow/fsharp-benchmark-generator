@@ -130,7 +130,7 @@ namespace Benchmarks
 			public string Id => "PeakWorkingSet64";
 			public string DisplayName => Id;
 			public string Legend => Id;
-			public string NumberFormat => "0";
+			public string NumberFormat => "000.###";
 			public UnitType UnitType => UnitType.Size;
 			public string Unit => "MB";
 			public bool TheGreaterTheBetter => false;
