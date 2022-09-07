@@ -1,10 +1,10 @@
 ﻿{
-  "LocalCodeRoot": "d:/test",
-  "SlnRelative": "test.sln",
+  "LocalCodeRoot": "MinimalSample",
+  "SlnRelative": "MinimalSample.sln",
   "CheckActions": [
     {
       "FileName": "Library.fs",
-      "ProjectName": "test"
+      "ProjectName": "MinimalSample"
     }
   ]
 }
