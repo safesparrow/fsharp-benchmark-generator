@@ -118,9 +118,10 @@ let private doLoadOptions (toolsPath : ToolsPath) (sln : string) =
 
 /// Not a bulletproof way to get an absolute path from a possibly relative one
 let toAbsolutePath (baseDir : string) (path : string) =
-    if Path.IsPathRooted(path) then path
+    if Path.IsPathRooted (path) then
+        path
     else
-        Path.Combine(baseDir, path)
+        Path.Combine (baseDir, path)
 
 [<MethodImpl(MethodImplOptions.NoInlining)>]
 let private loadOptions (sln : string) =
@@ -285,11 +286,14 @@ let private prepareAndRun
     (versions : NuGetFCSVersion list)
     =
     let codebase = prepareCodebase config case
-    let binDir = Path.GetDirectoryName(Assembly.GetAssembly(typeof<BenchmarkCase>).Location)
+
+    let binDir =
+        Path.GetDirectoryName (Assembly.GetAssembly(typeof<BenchmarkCase>).Location)
+
     let absoluteCodebasePath = toAbsolutePath binDir codebase.Path
     let inputs = generateInputs case absoluteCodebasePath
     let inputsPath = makeInputsPath absoluteCodebasePath
-    log.Information("Serializing inputs as {inputsPath}", inputsPath)        
+    log.Information ("Serializing inputs as {inputsPath}", inputsPath)
     let serialized = serializeInputs inputs
     Directory.CreateDirectory (Path.GetDirectoryName (inputsPath)) |> ignore
     File.WriteAllText (inputsPath, serialized)
