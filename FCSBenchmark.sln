@@ -4,6 +4,8 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Runner", "Runner\Runner.fsp
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Generator", "Generator.fsproj", "{39D9CB01-D59C-44FA-A540-80707C51B6AC}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BDNExtensions", "BDNExtensions\BDNExtensions.csproj", "{CC8C6316-8DC1-49D3-BCFA-EDD5F2F23BBA}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -22,5 +24,9 @@ Global
 		{0046E446-D4C2-40F9-BB9A-BF1321EC5D13}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{0046E446-D4C2-40F9-BB9A-BF1321EC5D13}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{0046E446-D4C2-40F9-BB9A-BF1321EC5D13}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CC8C6316-8DC1-49D3-BCFA-EDD5F2F23BBA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CC8C6316-8DC1-49D3-BCFA-EDD5F2F23BBA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CC8C6316-8DC1-49D3-BCFA-EDD5F2F23BBA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CC8C6316-8DC1-49D3-BCFA-EDD5F2F23BBA}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

@@ -36,4 +36,8 @@
       <PackageReference Include="OpenTelemetry.Exporter.Zipkin" Version="1.1.0" />
     </ItemGroup>
 
+    <ItemGroup>
+      <ProjectReference Include="..\BDNExtensions\BDNExtensions.csproj" />
+    </ItemGroup>
+
 </Project>

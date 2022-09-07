@@ -75,6 +75,7 @@ let createHackedNugetSourceDir (dir : string) =
 
 
 [<MemoryDiagnoser>]
+[<Benchmarks.CpuDiagnoser>]
 type Benchmark() =
 
     let printDiagnostics (results : FSharpCheckFileResults) =
