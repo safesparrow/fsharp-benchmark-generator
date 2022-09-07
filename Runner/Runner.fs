@@ -333,7 +333,7 @@ type RunnerArgs =
 
 let private makeConfig (versions : NuGetFCSVersion list) (args : RunnerArgs) : IConfig =
     let baseJob =
-        Job.ShortRun.WithWarmupCount(args.Warmups).WithIterationCount (args.Iterations)
+        Job.Dry.WithWarmupCount(args.Warmups).WithIterationCount (args.Iterations)
 
     let inputs = args.Input |> Seq.toList
     let parallelAnalysisModes =
