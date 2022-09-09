@@ -47,16 +47,16 @@ namespace Benchmarks
 			return RunMode.NoOverhead;
 		}
 
-		long userStart, userEnd;
-		long privStart, privEnd;
-
 		private long PeakMemory = 0;
-		private TimeSpan TotalProcessorTime = TimeSpan.Zero;
-		private TimeSpan beforeCpu = TimeSpan.Zero;
+		private float TotalProcessorTime = 0;
+		private float beforeCpu = 0;
 		TimeSpan? lastCpu = null;
 		int id = 0;
 		Task? t = null;
-		
+		private PerformanceCounter cpuCounter;
+		private int coreCount;
+		private Process currentProcess;
+
 		public void Handle(HostSignal signal, DiagnoserActionParameters parameters)
 		{
 			CancellationTokenSource cts = new CancellationTokenSource();
@@ -65,7 +65,12 @@ namespace Benchmarks
 			{
 				id = parameters.Process.Id;
 				var p = Process.GetProcessById(id);
-				beforeCpu = p.TotalProcessorTime;
+				
+				this.currentProcess = Process.GetCurrentProcess();
+				cpuCounter = new PerformanceCounter("Process", "% Processor Time", currentProcess.ProcessName);
+				this.coreCount = Environment.ProcessorCount;
+				
+				beforeCpu = this.cpuCounter.NextValue();
 				
 				t = Task.Factory.StartNew(async () =>
 					{
@@ -75,8 +80,8 @@ namespace Benchmarks
 							{
 								var p = Process.GetProcessById(id);
 								var peak = p.WorkingSet64;
-								var afterCpu  = p.TotalProcessorTime;
-								TotalProcessorTime = afterCpu.Subtract(beforeCpu);
+								var afterCpu  = this.cpuCounter.NextValue();
+								TotalProcessorTime = afterCpu - beforeCpu;
 								PeakMemory = Math.Max(PeakMemory, peak);
 								Console.WriteLine($"{TotalProcessorTime}s, {PeakMemory}b, {p.Id}");
 							}
@@ -85,7 +90,7 @@ namespace Benchmarks
 								
 							}
 
-							await Task.Delay(50, cts.Token);
+							await Task.Delay(500, cts.Token);
 						}
 					}, cts.Token
 				);
@@ -98,10 +103,8 @@ namespace Benchmarks
 
 		public IEnumerable<Metric> ProcessResults(DiagnoserResults results)
 		{
-			yield return new Metric(CpuUserMetricDescriptor.Instance, TotalProcessorTime.TotalMilliseconds * 1000_000);
+			yield return new Metric(CpuUserMetricDescriptor.Instance, TotalProcessorTime * 1000_000);
 			yield return new Metric(PeakMemoryMetricDescriptor.Instance, PeakMemory);
-			// yield return new Metric(CpuUserMetricDescriptor.Instance, 1000000000);
-			// yield return new Metric(PeakMemoryMetricDescriptor.Instance, 1000000000);
 		}
 
 		public IEnumerable<ValidationError> Validate(ValidationParameters validationParameters)

@@ -118,9 +118,7 @@ type Benchmark() =
 
     static member InputEnvironmentVariable = "FcsBenchmarkInput"
     static member OtelEnvironmentVariable = "FcsBenchmarkRecordOtelJaeger"
-
-    static member BenchmarkParallelProjectsAnalysisEnvironmentVariable =
-        "FcsBenchmarkParallelProjectsAnalysis"
+    static member ParallelProjectsAnalysisEnvironmentVariable = "FCS_PARALLEL_PROJECTS_ANALYSIS"
 
     member _.SetupTelemetry () =
         let useTracing =
@@ -387,7 +385,7 @@ let private makeConfig (versions : NuGetFCSVersion list) (args : RunnerArgs) : I
                     .WithNuGet(refs)
                     .WithEnvironmentVariable(Benchmark.InputEnvironmentVariable, input)
                     .WithEnvironmentVariable(
-                        Benchmark.BenchmarkParallelProjectsAnalysisEnvironmentVariable,
+                        Benchmark.ParallelProjectsAnalysisEnvironmentVariable,
                         parallelAnalysisMode.ToString ()
                     )
                     .WithEnvironmentVariable(

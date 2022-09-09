@@ -4,6 +4,7 @@ open System
 open System.IO
 open System.Reflection
 open System.Runtime.CompilerServices
+open System.Security.Cryptography
 open System.Text.RegularExpressions
 open FCSBenchmark.Common.Dtos
 open CommandLine
@@ -170,10 +171,9 @@ let private generateInputs (case : BenchmarkCase) (codeRoot : string) =
         BenchmarkInputs.Config = config
     }
 
-let private makeInputsPath (codeRoot : string) =
-    let artifactsDir = Path.Combine (codeRoot, ".artifacts")
+let private makeInputsPath (baseDir : string) =
     let dateStr = DateTime.UtcNow.ToString ("yyyy-MM-dd_HH-mm-ss")
-    Path.Combine (artifactsDir, $"{dateStr}.fcsinputs.json")
+    Path.Combine (baseDir, $"{dateStr}.fcsinputs.json")
 
 // These are the env variables that Ionide.ProjInfo seems to set (in-process).
 // We need to get rid of them so that the child 'dotnet run' process is using the right tools
@@ -273,9 +273,57 @@ type DisposableTempDir() =
 
     member this.Dir = dir
 
+let inputsBaseDir (config : Config) =
+    Path.Combine(config.BaseDir, "__inputs") 
+
+let md5 (file : string) =
+    use md5 = MD5.Create()
+    use stream = File.OpenRead(file)
+    let bytes = md5.ComputeHash(stream)
+    BitConverter.ToString(bytes).Replace("-", "").ToLowerInvariant()
+
+let inputsHashPath (inputsPath : string) =
+    Path.Combine(Path.GetDirectoryName(inputsPath), Path.GetFileNameWithoutExtension(inputsPath) + ".hash")
+
+let buildInputsDict (config : Config) =
+    let dir = inputsBaseDir config
+    Directory.EnumerateFiles(dir, "*.fcsinputs.json")
+    |> Seq.choose (fun f ->
+        let hashPath = inputsHashPath f
+        if File.Exists hashPath then
+            let hash = File.ReadAllText(hashPath)
+            (hash, f) |> Some
+        else
+            None
+    )
+    |> dict
+
+let getOrGenerateInputs (config : Config) (casePath : string) (case : BenchmarkCase) absoluteCodebasePath =
+    let inputsBaseDir = inputsBaseDir config
+    Directory.CreateDirectory inputsBaseDir |> ignore
+    let cache = buildInputsDict config
+    let caseMD5 = md5 casePath
+    log.Information("Hash: {hash}", caseMD5)
+    match cache.TryGetValue caseMD5 with
+    | true, cachedInputsPath ->
+        log.Information("Using cached generated inputs in {path}", cachedInputsPath)
+        cachedInputsPath
+    | false, _ ->
+    
+    let inputs = generateInputs case absoluteCodebasePath
+    let inputsPath = makeInputsPath inputsBaseDir
+    log.Information ("Serializing inputs as {inputsPath}", inputsPath)
+    let serialized = serializeInputs inputs
+    File.WriteAllText (inputsPath, serialized)
+    let hashPath = inputsHashPath inputsPath
+    log.Information ("Serializing hash {hash} as {hashPath}", caseMD5, hashPath)
+    Directory.CreateDirectory (Path.GetDirectoryName hashPath) |> ignore
+    File.WriteAllText(hashPath, caseMD5)
+    inputsPath
+
 let private prepareAndRun
     (config : Config)
-    (case : BenchmarkCase)
+    (casePath : string, case : BenchmarkCase)
     (dryRun : bool)
     (cleanup : bool)
     (iterations : int)
@@ -291,12 +339,7 @@ let private prepareAndRun
         Path.GetDirectoryName (Assembly.GetAssembly(typeof<BenchmarkCase>).Location)
 
     let absoluteCodebasePath = toAbsolutePath binDir codebase.Path
-    let inputs = generateInputs case absoluteCodebasePath
-    let inputsPath = makeInputsPath absoluteCodebasePath
-    log.Information ("Serializing inputs as {inputsPath}", inputsPath)
-    let serialized = serializeInputs inputs
-    Directory.CreateDirectory (Path.GetDirectoryName (inputsPath)) |> ignore
-    File.WriteAllText (inputsPath, serialized)
+    let inputsPath = getOrGenerateInputs config casePath case absoluteCodebasePath
 
     if dryRun = false then
         use _ = LogContext.PushProperty ("step", "Run")
@@ -475,7 +518,7 @@ let readSampleInput (sampleName : string) =
         else
             failwith $"Samples directory '{dir}' does not exist"
 
-let prepareCase (args : Args) : BenchmarkCase =
+let prepareCase (args : Args) : string * BenchmarkCase =
     use _ = LogContext.PushProperty ("step", "Read input")
 
     try
@@ -505,9 +548,11 @@ let prepareCase (args : Args) : BenchmarkCase =
                 | true -> defaultCodebasePrep
                 | false -> case.CodebasePrep
 
-            { case with
-                CodebasePrep = codebasePrep
-            }
+            let case = 
+                { case with
+                    CodebasePrep = codebasePrep
+                }
+            path, case
     with e ->
         let msg = $"Failed to read inputs file: {e.Message}"
         log.Fatal (msg)
