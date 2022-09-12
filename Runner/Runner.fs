@@ -75,7 +75,6 @@ let createHackedNugetSourceDir (dir : string) =
 
 
 [<MemoryDiagnoser>]
-[<Benchmarks.CpuDiagnoser>]
 type Benchmark() =
 
     let printDiagnostics (results : FSharpCheckFileResults) =
@@ -118,7 +117,7 @@ type Benchmark() =
 
     static member InputEnvironmentVariable = "FcsBenchmarkInput"
     static member OtelEnvironmentVariable = "FcsBenchmarkRecordOtelJaeger"
-    static member ParallelProjectsAnalysisEnvironmentVariable = "FCS_PARALLEL_PROJECTS_ANALYSIS"
+    static member BenchmarkParallelProjectsAnalysisEnvironmentVariable = "FCS_PARALLEL_PROJECTS_ANALYSIS"
 
     member _.SetupTelemetry () =
         let useTracing =
@@ -385,7 +384,7 @@ let private makeConfig (versions : NuGetFCSVersion list) (args : RunnerArgs) : I
                     .WithNuGet(refs)
                     .WithEnvironmentVariable(Benchmark.InputEnvironmentVariable, input)
                     .WithEnvironmentVariable(
-                        Benchmark.ParallelProjectsAnalysisEnvironmentVariable,
+                        Benchmark.BenchmarkParallelProjectsAnalysisEnvironmentVariable,
                         parallelAnalysisMode.ToString ()
                     )
                     .WithEnvironmentVariable(
