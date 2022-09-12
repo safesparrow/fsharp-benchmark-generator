@@ -117,9 +117,7 @@ type Benchmark() =
 
     static member InputEnvironmentVariable = "FcsBenchmarkInput"
     static member OtelEnvironmentVariable = "FcsBenchmarkRecordOtelJaeger"
-
-    static member BenchmarkParallelProjectsAnalysisEnvironmentVariable =
-        "FcsBenchmarkParallelProjectsAnalysis"
+    static member BenchmarkParallelProjectsAnalysisEnvironmentVariable = "FCS_PARALLEL_PROJECTS_ANALYSIS"
 
     member _.SetupTelemetry () =
         let useTracing =
