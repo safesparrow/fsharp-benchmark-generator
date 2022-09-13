@@ -117,7 +117,9 @@ type Benchmark() =
 
     static member InputEnvironmentVariable = "FcsBenchmarkInput"
     static member OtelEnvironmentVariable = "FcsBenchmarkRecordOtelJaeger"
-    static member BenchmarkParallelProjectsAnalysisEnvironmentVariable = "FCS_PARALLEL_PROJECTS_ANALYSIS"
+
+    static member BenchmarkParallelProjectsAnalysisEnvironmentVariable =
+        "FCS_PARALLEL_PROJECTS_ANALYSIS"
 
     member _.SetupTelemetry () =
         let useTracing =
@@ -340,7 +342,7 @@ let private makeConfig (versions : NuGetFCSVersion list) (args : RunnerArgs) : I
     let baseJob =
         Job.Dry.WithWarmupCount(args.Warmups).WithIterationCount (args.Iterations)
 
-    let inputs = args.Input |> Seq.toList
+    let inputs = args.Input |> Seq.toList |> List.mapi (fun i x -> i, x)
 
     let parallelAnalysisModes =
         match args.ParallelAnalysis with
@@ -373,11 +375,11 @@ let private makeConfig (versions : NuGetFCSVersion list) (args : RunnerArgs) : I
 
     let jobs =
         combinations
-        |> List.mapi (fun i (((input, (versionName, refs)), parallelAnalysisMode), gcMode) ->
+        |> List.mapi (fun i ((((inputIdx, input), (versionName, refs)), parallelAnalysisMode), gcMode) ->
             let useServerGc = gcMode = GCMode.Server
 
             let jobName =
-                $"fcs={versionName}_parallel={parallelAnalysisMode}_serverGc={useServerGc}"
+                $"fcs={versionName}_input=#{inputIdx}_parallel={parallelAnalysisMode}_serverGc={useServerGc}"
 
             let job =
                 baseJob
@@ -448,4 +450,11 @@ let main args =
 
     match result with
     | :? Parsed<RunnerArgs> as parsed -> runStandard parsed.Value
-    | _ -> failwith "Parse error"
+    | :? NotParsed<RunnerArgs> as notParsed ->
+        let errorsString =
+            notParsed.Errors
+            |> Seq.map (fun e -> e.ToString ())
+            |> fun lines -> String.Join (Environment.NewLine, lines)
+
+        failwith $"Parse errors: {errorsString}"
+    | _ -> failwith "Unexpected result type"
