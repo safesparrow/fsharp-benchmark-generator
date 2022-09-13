@@ -117,7 +117,9 @@ type Benchmark() =
 
     static member InputEnvironmentVariable = "FcsBenchmarkInput"
     static member OtelEnvironmentVariable = "FcsBenchmarkRecordOtelJaeger"
-    static member BenchmarkParallelProjectsAnalysisEnvironmentVariable = "FCS_PARALLEL_PROJECTS_ANALYSIS"
+
+    static member BenchmarkParallelProjectsAnalysisEnvironmentVariable =
+        "FCS_PARALLEL_PROJECTS_ANALYSIS"
 
     member _.SetupTelemetry () =
         let useTracing =
@@ -447,12 +449,12 @@ let main args =
     let result = parser.ParseArguments<RunnerArgs> (args)
 
     match result with
-    | :? Parsed<RunnerArgs> as parsed ->
-        runStandard parsed.Value
+    | :? Parsed<RunnerArgs> as parsed -> runStandard parsed.Value
     | :? NotParsed<RunnerArgs> as notParsed ->
         let errorsString =
             notParsed.Errors
-            |> Seq.map (fun e -> e.ToString())
-            |> fun lines -> String.Join(Environment.NewLine, lines)
+            |> Seq.map (fun e -> e.ToString ())
+            |> fun lines -> String.Join (Environment.NewLine, lines)
+
         failwith $"Parse errors: {errorsString}"
     | _ -> failwith "Unexpected result type"

@@ -5,9 +5,15 @@ open System.Collections.Generic
 open System.Diagnostics
 open System.Threading
 open Serilog.Events
-    
-let runProcess (name:string) (args:string) workingDir (envVariables : (string * string) list) (outputLogLevel : LogEventLevel) =
-    let info = ProcessStartInfo()
+
+let runProcess
+    (name : string)
+    (args : string)
+    workingDir
+    (envVariables : (string * string) list)
+    (outputLogLevel : LogEventLevel)
+    =
+    let info = ProcessStartInfo ()
     info.WindowStyle <- ProcessWindowStyle.Hidden
     info.Arguments <- args
     info.FileName <- name
