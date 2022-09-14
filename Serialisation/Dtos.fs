@@ -21,7 +21,18 @@ type AnalyseFileDto =
         Repeat : int
     }
 
-type BenchmarkActionDto = | AnalyseFile of AnalyseFileDto
+[<CLIMutable>]
+type BuildProjectDto =
+    {
+        Args : string array
+        ProjectFileName : string
+        [<DefaultValue(1)>]
+        Repeat : int
+    }
+
+type BenchmarkActionDto =
+    | AnalyseFile of AnalyseFileDto
+    | BuildProject of BuildProjectDto
 
 [<CLIMutable>]
 type BenchmarkConfig =
@@ -48,7 +59,17 @@ type AnalyseFile =
         Repeat : int
     }
 
-type BenchmarkAction = | AnalyseFile of AnalyseFile
+/// Defines a call to BackgroundChecker.Compile(argv: string array) =
+type BuildProject =
+    {
+        Args : string array
+        ProjectFileName : string
+        Repeat : int
+    }
+
+type BenchmarkAction =
+    | AnalyseFile of AnalyseFile
+    | BuildProject of BuildProject
 
 type BenchmarkInputs =
     {
@@ -68,6 +89,13 @@ let actionToDto =
                 Repeat = x.Repeat
             }
             |> BenchmarkActionDto.AnalyseFile
+        | BenchmarkAction.BuildProject x ->
+            {
+                BuildProjectDto.Args = x.Args
+                ProjectFileName = x.ProjectFileName
+                Repeat = x.Repeat
+            }
+            |> BenchmarkActionDto.BuildProject
     |> memoizeUsingRefComparison
 
 let inputsToDtos =
@@ -90,6 +118,13 @@ let private actionFromDto =
                 Repeat = x.Repeat
             }
             |> BenchmarkAction.AnalyseFile
+        | BenchmarkActionDto.BuildProject x ->
+            {
+                BuildProject.Args = x.Args
+                ProjectFileName = x.ProjectFileName
+                Repeat = x.Repeat
+            }
+            |> BenchmarkAction.BuildProject
     |> memoizeUsingRefComparison
 
 let private inputsFromDto =

@@ -20,9 +20,17 @@ open Serilog
 open Serilog.Context
 open Serilog.Events
 
+[<Literal>]
+let Analyze = "analyze"
+
+[<Literal>]
+let Build = "build"
+
 [<CLIMutable>]
 type CheckAction =
     {
+        /// Can be "analyze" or "build"
+        Type : string
         FileName : string
         ProjectName : string
         [<JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)>]
@@ -138,6 +146,9 @@ let private loadOptions (sln : string) =
     Thread.Sleep (500)
     doLoadOptions toolsPath sln
 
+let private projectOptionsToCommandLineArguments (options : FSharpProjectOptions) : string array =
+    [| yield! options.OtherOptions ; yield! options.SourceFiles |]
+
 let private generateInputs (case : BenchmarkCase) (codeRoot : string) =
     let sln = Path.Combine (codeRoot, case.SlnRelative)
     let options = loadOptions sln
@@ -146,26 +157,33 @@ let private generateInputs (case : BenchmarkCase) (codeRoot : string) =
 
     let actions =
         case.CheckActions
-        |> List.mapi (fun i {
-                                FileName = projectRelativeFileName
-                                ProjectName = projectName
-                                Repeat = repeat
-                            } ->
-            let project = options[projectName]
+        |> List.mapi (fun i checkAction ->
+            let project = options[checkAction.ProjectName]
 
             let filePath =
-                Path.Combine (Path.GetDirectoryName (project.ProjectFileName), projectRelativeFileName)
+                Path.Combine (Path.GetDirectoryName project.ProjectFileName, checkAction.FileName)
 
             let fileText = File.ReadAllText (filePath)
 
-            BenchmarkAction.AnalyseFile
-                {
-                    FileName = filePath
-                    FileVersion = i
-                    SourceText = fileText
-                    Options = project
-                    Repeat = repeat
-                }
+            match checkAction.Type with
+            | Analyze ->
+                BenchmarkAction.AnalyseFile
+                    {
+                        FileName = filePath
+                        FileVersion = i
+                        SourceText = fileText
+                        Options = project
+                        Repeat = checkAction.Repeat
+                    }
+            | Build ->
+                BenchmarkAction.BuildProject
+                    {
+                        Args = projectOptionsToCommandLineArguments project
+                        ProjectFileName = project.ProjectFileName
+                        Repeat = checkAction.Repeat
+                    }
+            | unknownType ->
+                failwith $"Unrecognized Action Type {unknownType}, supported values are \"{Analyze}\" and \"{Build}\""
         )
 
     let config : BenchmarkConfig =
