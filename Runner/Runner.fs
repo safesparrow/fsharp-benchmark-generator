@@ -103,7 +103,7 @@ type Benchmark() =
                         x.Options
                     )
                     |> Async.RunSynchronously
-
+                
                 match answer with
                 | FSharpCheckFileAnswer.Aborted -> failwith "checker aborted"
                 | FSharpCheckFileAnswer.Succeeded results ->
@@ -117,9 +117,7 @@ type Benchmark() =
 
     static member InputEnvironmentVariable = "FcsBenchmarkInput"
     static member OtelEnvironmentVariable = "FcsBenchmarkRecordOtelJaeger"
-
-    static member BenchmarkParallelProjectsAnalysisEnvironmentVariable =
-        "FCS_PARALLEL_PROJECTS_ANALYSIS"
+    static member ParallelProjectsAnalysisEnvironmentVariable = "FcsBenchmarkParallelReferenceResolution"
 
     member _.SetupTelemetry () =
         let useTracing =
@@ -167,8 +165,18 @@ type Benchmark() =
         if File.Exists (inputFile) then
             let inputs = Benchmark.ReadInput (inputFile)
 
+            let parallelReferenceResolution =
+                Environment.GetEnvironmentVariable(Benchmark.ParallelProjectsAnalysisEnvironmentVariable)
+                |> Option.ofObj
+                |> Option.bind (fun parallelResolution ->
+                        match bool.TryParse parallelResolution with
+                        | true, parallelResolution -> Some parallelResolution
+                        | false, _ -> None
+                )
+                |> Option.defaultValue false
+            
             let checker =
-                FSharpChecker.Create (projectCacheSize = inputs.Config.ProjectCacheSize)
+                FSharpChecker.Create (projectCacheSize = inputs.Config.ProjectCacheSize, parallelReferenceResolution = parallelReferenceResolution)
 
             setup <- (checker, inputs.Actions) |> Some
         else
@@ -375,7 +383,7 @@ let private makeConfig (versions : NuGetFCSVersion list) (args : RunnerArgs) : I
 
     let jobs =
         combinations
-        |> List.mapi (fun i ((((inputIdx, input), (versionName, refs)), parallelAnalysisMode), gcMode) ->
+        |> List.map (fun ((((inputIdx, input), (versionName, refs)), parallelAnalysisMode), gcMode) ->
             let useServerGc = gcMode = GCMode.Server
 
             let jobName =
@@ -383,10 +391,10 @@ let private makeConfig (versions : NuGetFCSVersion list) (args : RunnerArgs) : I
 
             let job =
                 baseJob
-                    .WithNuGet(refs)
+                    // .WithNuGet(refs)
                     .WithEnvironmentVariable(Benchmark.InputEnvironmentVariable, input)
                     .WithEnvironmentVariable(
-                        Benchmark.BenchmarkParallelProjectsAnalysisEnvironmentVariable,
+                        Benchmark.ParallelProjectsAnalysisEnvironmentVariable,
                         parallelAnalysisMode.ToString ()
                     )
                     .WithEnvironmentVariable(
