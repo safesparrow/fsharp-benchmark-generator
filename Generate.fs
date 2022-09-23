@@ -14,6 +14,7 @@ open FCSBenchmark.Generator.RepoSetup
 open FSharp.Compiler.CodeAnalysis
 open Ionide.ProjInfo
 open Ionide.ProjInfo.Types
+open Microsoft.Build.Locator
 open Newtonsoft.Json
 open Newtonsoft.Json.Linq
 open Serilog
@@ -95,6 +96,7 @@ let private withRedirectedConsole<'a> (f : unit -> 'a) =
 let mutable private msbuildRegistered = false
 
 let registerMSBuild () =
+    Microsoft.Build.Locator.MSBuildLocator.QueryVisualStudioInstances(VisualStudioInstanceQueryOptions(WorkingDirectory="c:/project.sln"))
     Microsoft.Build.Locator.MSBuildLocator.RegisterDefaults () |> ignore
 
 [<MethodImpl(MethodImplOptions.NoInlining)>]
@@ -103,9 +105,11 @@ let private doLoadOptions (toolsPath : ToolsPath) (sln : string) =
     let props = []
     let loader = WorkspaceLoader.Create (toolsPath, props)
 
-    let projects, _ =
-        fun () -> loader.LoadSln (sln, [], BinaryLogGeneration.Off) |> Seq.toList
-        |> withRedirectedConsole
+    let projects = loader.LoadSln (sln, [], BinaryLogGeneration.Off) |> Seq.toList
+    
+    // let projects, _ =
+    //     fun () -> loader.LoadSln (sln, [], BinaryLogGeneration.Off) |> Seq.toList
+    //     |> withRedirectedConsole
 
     log.Information ("{projectsCount} projects loaded from {sln}", projects.Length, sln)
 
