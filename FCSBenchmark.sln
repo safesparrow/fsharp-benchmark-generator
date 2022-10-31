@@ -4,6 +4,10 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Runner", "Runner\Runner.fsp
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Generator", "Generator.fsproj", "{39D9CB01-D59C-44FA-A540-80707C51B6AC}"
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "FSharp.Compiler.Service", "..\fsharp_main\src\Compiler\FSharp.Compiler.Service.fsproj", "{D6E18082-447E-42F8-AA09-B126C0652564}"
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "BuildalyzerGo", "BuildalyzerGo\BuildalyzerGo.fsproj", "{F3B7C253-948B-420D-99B8-C68A4E940520}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -22,5 +26,13 @@ Global
 		{0046E446-D4C2-40F9-BB9A-BF1321EC5D13}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{0046E446-D4C2-40F9-BB9A-BF1321EC5D13}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{0046E446-D4C2-40F9-BB9A-BF1321EC5D13}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D6E18082-447E-42F8-AA09-B126C0652564}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D6E18082-447E-42F8-AA09-B126C0652564}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D6E18082-447E-42F8-AA09-B126C0652564}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D6E18082-447E-42F8-AA09-B126C0652564}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F3B7C253-948B-420D-99B8-C68A4E940520}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F3B7C253-948B-420D-99B8-C68A4E940520}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F3B7C253-948B-420D-99B8-C68A4E940520}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F3B7C253-948B-420D-99B8-C68A4E940520}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

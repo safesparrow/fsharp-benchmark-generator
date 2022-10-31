@@ -96,6 +96,8 @@ type Benchmark() =
             [ 1 .. x.Repeat ]
             |> List.map (fun _ ->
                 let result, answer =
+                    let xss: System.Array = [|1; 2; 3|]
+                    printfn "%A" xss
                     checker.ParseAndCheckFileInProject (
                         x.FileName,
                         x.FileVersion,
@@ -443,13 +445,19 @@ let runStandard args =
     printfn $"Reports available in '{summary.ResultsDirectoryPath}'"
     0
 
+let runS () =
+    Environment.SetEnvironmentVariable(Benchmark.InputEnvironmentVariable, "c:/fff/__inputs/2022-09-23_18-23-23.fcsinputs.json")
+    let b = Benchmark()
+    b.Setup()
+    b.Run()
+
 [<EntryPoint>]
 let main args =
     use parser = new Parser (fun x -> x.IgnoreUnknownArguments <- false)
     let result = parser.ParseArguments<RunnerArgs> (args)
 
     match result with
-    | :? Parsed<RunnerArgs> as parsed -> runStandard parsed.Value
+    | :? Parsed<RunnerArgs> as parsed -> runS (); 0
     | :? NotParsed<RunnerArgs> as notParsed ->
         let errorsString =
             notParsed.Errors

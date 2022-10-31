@@ -190,11 +190,11 @@ let private makeInputsPath (baseDir : string) =
 // We need to get rid of them so that the child 'dotnet run' process is using the right tools
 let private projInfoEnvVariables =
     [
-        "MSBuildExtensionsPath"
-        "DOTNET_ROOT"
-        "MSBUILD_EXE_PATH"
-        "DOTNET_HOST_PATH"
-        "MSBuildSDKsPath"
+        // "MSBuildExtensionsPath"
+        // "DOTNET_ROOT"
+        // "MSBUILD_EXE_PATH"
+        // "DOTNET_HOST_PATH"
+        // "MSBuildSDKsPath"
     ]
 
 let private emptyProjInfoEnvironmentVariables () =
@@ -371,7 +371,7 @@ let private prepareAndRun
         let extraEnvVariables =
             [
                 // Clear variables set by 'dotnet' that affect the runner
-                "DOTNET_ROOT_X64", ""
+                // "DOTNET_ROOT_X64", ""
             ]
 
         let envVariables = emptyProjInfoEnvironmentVariables () @ extraEnvVariables
@@ -703,13 +703,23 @@ let run (args : Args) : unit =
         else
             log.Fatal (ex, "Failure. Consider using --verbose for extra information.")
 
+open Buildalyzer
+let x () =
+    let amo = AnalyzerManagerOptions()
+    let sln = "c:/projekty/fsharp/fsharp_main/FSharp.sln"
+    let am = AnalyzerManager()
+    let p = am.GetProject("c:/projekty/fsharp/fsharp_main/src/compiler/FSharp.Compiler.Service.fsproj")
+    printfn $"%+A{p}"
+
 [<EntryPoint>]
 [<MethodImpl(MethodImplOptions.NoInlining)>]
 let main args =
-    try
-        let parseResult = Parser.Default.ParseArguments<Args> args
-        parseResult.WithParsed (run) |> ignore
-        if parseResult.Tag = ParserResultType.Parsed then 0 else 1
-    with ex ->
-        log.Error (ex, "Failure.")
-        1
+    x ()
+    0
+    // try
+    //     let parseResult = Parser.Default.ParseArguments<Args> args
+    //     parseResult.WithParsed (run) |> ignore
+    //     if parseResult.Tag = ParserResultType.Parsed then 0 else 1
+    // with ex ->
+    //     log.Error (ex, "Failure.")
+    //     1
