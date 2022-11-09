@@ -513,7 +513,7 @@ let main args =
     let result = parser.ParseArguments<RunnerArgs> (args)
 
     match result with
-    | :? Parsed<RunnerArgs> as parsed -> runS (); 0 //parsed.Value; 0
+    | :? Parsed<RunnerArgs> as parsed -> runStandard parsed.Value; 0 //parsed.Value; 0
     | :? NotParsed<RunnerArgs> as notParsed ->
         let errorsString =
             notParsed.Errors
