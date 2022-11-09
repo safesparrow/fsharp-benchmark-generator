@@ -1,9 +1,11 @@
 ﻿module FCSBenchmark.Runner
 
 open System
+open System.Threading
 open System.Collections.Generic
 open System.IO
 open System.IO.Compression
+open System.Reflection
 open System.Text.RegularExpressions
 open System.Threading
 open BenchmarkDotNet.Analysers
@@ -73,6 +75,48 @@ let createHackedNugetSourceDir (dir : string) =
     printfn $"Hacked NuGet source dir from {dir} to {copy.Dir.FullName}"
     copy.Dir, newVersion
 
+/// Defines a call to BackgroundChecker.ParseAndCheckFileInProject(fileName: string, fileVersion, sourceText: ISourceText, options: FSharpProjectOptions, userOpName) =
+type CheckArgs =
+    {
+        FileName : string
+        FileVersion : int
+        SourceText : string
+        Options : FSharpProjectOptions
+    }
+
+type CheckResults = Async<FSharpParseFileResults * FSharpCheckFileResults>
+
+type ReflectiveChecker() =
+    let checker =
+        let t = typeof<FSharpChecker>
+        let create =
+            t.GetMethods()
+            |> Array.filter (fun m -> m.Name = "Create" && m.IsStatic)
+            |> Array.maxBy (fun m -> m.GetParameters().Length)
+        
+        let nParams = create.GetParameters().Length
+        create.Invoke(
+            null,
+            Array.create nParams Type.Missing
+        )
+    
+    
+    member this.Check (args : CheckArgs) : CheckResults =
+        let t = typeof<FSharpChecker>
+        let parse =
+            t.GetMethods()
+            |> Array.filter (fun m -> m.Name = "ParseAndCheckFileInProject")
+            |> Array.exactlyOne
+        let objArgs =
+            [|
+                args.FileName :> obj
+                args.FileVersion :> obj
+                args.SourceText |> FSharp.Compiler.Text.SourceText.ofString :> obj
+                args.Options :> obj
+            |]
+        let res =
+            parse.Invoke(checker, objArgs)
+        res :?> CheckResults
 
 [<MemoryDiagnoser>]
 type Benchmark() =
@@ -96,8 +140,6 @@ type Benchmark() =
             [ 1 .. x.Repeat ]
             |> List.map (fun _ ->
                 let result, answer =
-                    let xss: System.Array = [|1; 2; 3|]
-                    printfn "%A" xss
                     checker.ParseAndCheckFileInProject (
                         x.FileName,
                         x.FileVersion,
@@ -168,9 +210,23 @@ type Benchmark() =
 
         if File.Exists (inputFile) then
             let inputs = Benchmark.ReadInput (inputFile)
-
+    // /// Instantiate an interactive checker.
+    // static member Create
+    //     (
+    //         ?projectCacheSize,
+    //         ?keepAssemblyContents,
+    //         ?keepAllBackgroundResolutions,
+    //         ?legacyReferenceResolver,
+    //         ?tryGetMetadataSnapshot,
+    //         ?suggestNamesForErrors,
+    //         ?keepAllBackgroundSymbolUses,
+    //         ?enableBackgroundItemKeyStoreAndSemanticClassification,
+    //         ?enablePartialTypeChecking
+    //     ) =
+            
             let checker =
-                FSharpChecker.Create (projectCacheSize = inputs.Config.ProjectCacheSize)
+                
+                FSharpChecker.Create ()//projectCacheSize = inputs.Config.ProjectCacheSize)
 
             setup <- (checker, inputs.Actions) |> Some
         else
@@ -446,7 +502,7 @@ let runStandard args =
     0
 
 let runS () =
-    Environment.SetEnvironmentVariable(Benchmark.InputEnvironmentVariable, "c:/fff/__inputs/2022-09-23_18-23-23.fcsinputs.json")
+    Environment.SetEnvironmentVariable(Benchmark.InputEnvironmentVariable, @"c:\projekty\fsharp\fsharp-benchmark-generator\.artifacts\__inputs\2022-11-06_22-52-20.fcsinputs.json")
     let b = Benchmark()
     b.Setup()
     b.Run()
@@ -457,7 +513,7 @@ let main args =
     let result = parser.ParseArguments<RunnerArgs> (args)
 
     match result with
-    | :? Parsed<RunnerArgs> as parsed -> runS (); 0
+    | :? Parsed<RunnerArgs> as parsed -> runS (); 0 //parsed.Value; 0
     | :? NotParsed<RunnerArgs> as notParsed ->
         let errorsString =
             notParsed.Errors

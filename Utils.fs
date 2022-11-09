@@ -3,7 +3,6 @@ module FCSBenchmark.Generator.Utils
 
 open System.Collections.Generic
 open System.Diagnostics
-open System.Threading
 open Serilog.Events
 
 let runProcess

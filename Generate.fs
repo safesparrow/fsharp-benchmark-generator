@@ -647,7 +647,7 @@ let prepareFCSVersions (config : Config) (raw : FCSVersionsArgs) =
         | versions -> versions
 
 let run (args : Args) : unit =
-    registerMSBuild ()
+    //registerMSBuild ()
 
     log <-
         LoggerConfiguration()
@@ -703,23 +703,21 @@ let run (args : Args) : unit =
         else
             log.Fatal (ex, "Failure. Consider using --verbose for extra information.")
 
-open Buildalyzer
-let x () =
-    let amo = AnalyzerManagerOptions()
-    let sln = "c:/projekty/fsharp/fsharp_main/FSharp.sln"
-    let am = AnalyzerManager()
-    let p = am.GetProject("c:/projekty/fsharp/fsharp_main/src/compiler/FSharp.Compiler.Service.fsproj")
-    printfn $"%+A{p}"
+// open Buildalyzer
+// let x () =
+//     // let amo = AnalyzerManagerOptions()
+//     // let sln = "c:/projekty/fsharp/fsharp_main/FSharp.sln"
+//     let am = AnalyzerManager()
+//     let p = am.GetProject("c:/projekty/fsharp/fsharp_main/src/compiler/FSharp.Compiler.Service.fsproj")
+//     printfn $"%+A{p}"
 
 [<EntryPoint>]
 [<MethodImpl(MethodImplOptions.NoInlining)>]
 let main args =
-    x ()
-    0
-    // try
-    //     let parseResult = Parser.Default.ParseArguments<Args> args
-    //     parseResult.WithParsed (run) |> ignore
-    //     if parseResult.Tag = ParserResultType.Parsed then 0 else 1
-    // with ex ->
-    //     log.Error (ex, "Failure.")
-    //     1
+    try
+        let parseResult = Parser.Default.ParseArguments<Args> args
+        parseResult.WithParsed (run) |> ignore
+        if parseResult.Tag = ParserResultType.Parsed then 0 else 1
+    with ex ->
+        log.Error (ex, "Failure.")
+        1
